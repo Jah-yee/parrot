@@ -136,23 +136,28 @@ def check(folder, txt, body, ext, ref=None):
                         "highpass=f=80,loudnorm=I=-18:TP=-1.5", "-ar", "48000", "-ac", "1", "-b:a", "160k", mp3],
                        check=True)
         wav = os.path.join(tmp, "a.wav")
-        to_wav16(mp3, wav)
-        dur = duration(wav)
+        # a silent take trims down to nothing: ffmpeg then writes an empty file it can't read back
+        dur = 0.0
+        if os.path.getsize(mp3) > 1000:
+            to_wav16(mp3, wav)
+            dur = duration(wav)
         if dur < 0.5:
             os.remove(mp3)
             return {"error": "Nothing was heard in the recording. Is the microphone on?"}
         mine = align(wav, txt)
         heard = transcribe(wav, mine)
-        if all(m["t"] is None for m in mine):
-            # stopped before the end: score the words up to the last one whisper heard, the rest count as missed
-            wrong, _ = text.heard_words(txt, heard)
-            last = max((k for k, w in enumerate(wrong) if w is None), default=-1)
-            if last >= 0:
-                mine[:last + 1] = align(wav, " ".join(txt.split()[:last + 1]))
+        # stopped before the end: the aligner squeezes the whole text into the take and the words that were said
+        # score low, so score only the words up to the last one whisper heard; the rest count as missed
+        wrong, _ = text.heard_words(txt, heard)
+        said = max((k for k, w in enumerate(wrong) if w is None), default=-1) + 1
+        if 0 < said < len(mine) and all(w == "" for w in wrong[said:]):
+            mine[:said] = align(wav, " ".join(txt.split()[:said]))
+            mine[said:] = [{"t": None, "score": 0.0} for _ in mine[said:]]
     words = text.judge(txt, heard, mine, ref)
     good = sum(w["status"] == "good" for w in words)
+    spoken = said if 0 < said < len(words) else len(words)
     r = {"id": stamp, "when": datetime.datetime.now().isoformat(timespec="seconds"), "text": txt, "heard": heard,
-         "words": words, "duration": round(dur, 2), "wpm": round(len(words) / dur * 60) if dur else 0,
+         "words": words, "duration": round(dur, 2), "wpm": round(spoken / dur * 60) if dur else 0,
          "score": round(100 * good / max(1, len(words))),
          "audio": "/files/" + os.path.relpath(mp3, paths.DATA)}
     json.dump(r, open(os.path.join(folder, stamp + ".json"), "w"), indent=1)
