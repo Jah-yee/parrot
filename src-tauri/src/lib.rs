@@ -230,6 +230,41 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// A take through the whole engine, as the app runs it: needs the models on this machine.
+    /// cargo test --lib whole_take -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn whole_take() {
+        let home = PathBuf::from(std::env::var("HOME").unwrap());
+        let models = home.join("Library/Application Support/io.github.qwertymuzaffar.parrot/models");
+        let data = std::env::temp_dir().join(format!("parrot-e2e-{}", std::process::id()));
+        std::fs::create_dir_all(data.join("texts")).unwrap();
+        let engine = Engine { store: Store { data: data.clone() }, models, env: Mutex::new(None), aligner: Mutex::new(None), recognizer: Mutex::new(None) };
+        let text = "The northern lights are one of the most beautiful things you can see in the night sky.";
+        let t = engine.store.add(text, Some("Lights".into()), Some("sentences".into())).unwrap();
+        let id = t["id"].as_str().unwrap().to_string();
+        let wav = std::fs::read(std::env::var("PARROT_TAKE").unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        let a = engine.check(&id, text, &wav).unwrap();
+        eprintln!("{:.1} s · score {} · {} wpm · heard: {}", started.elapsed().as_secs_f64(), a.score, a.wpm, a.heard);
+        for w in a.words.iter().filter(|w| w.status != "good") {
+            eprintln!("  {} {} heard={:?} score={:?}", w.w, w.status, w.heard, w.score);
+        }
+        assert!(data.join(&a.audio).exists(), "the take is saved");
+        assert_eq!(engine.store.attempts(&id, text).unwrap().len(), 1);
+        assert_eq!(engine.store.scores(&id).unwrap().values().next().unwrap().last, a.score);
+        assert!(a.words.iter().any(|w| w.w == "things" && w.status == "wrong" && w.heard.as_deref() == Some("sinks")));
+        let silent = {
+            let p = data.join("silence.wav");
+            audio::write_wav(&p, &audio::Pcm { samples: vec![0.0; 48000], rate: 48000 }).unwrap();
+            std::fs::read(p).unwrap()
+        };
+        assert!(engine.check(&id, text, &silent).unwrap_err().contains("Nothing was heard"));
+        let _ = std::fs::remove_dir_all(data);
+    }
+
     #[test]
     fn headers_decode() {
         assert_eq!(super::percent_decode("I%E2%80%99m%20here%2C%20ok"), "I’m here, ok");

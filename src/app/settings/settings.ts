@@ -47,10 +47,10 @@ export function applyTheme(t: Theme) {
         <section>
           <span class="eyebrow">Speech engine</span>
           @if (health.value(); as h) {
-            <p class="ok"><span class="dot"></span> Running{{ h.whisper ? '' : ', downloading the speech model…' }}</p>
+            <p class="ok"><span class="dot"></span> {{ h.models.whisper && h.models.aligner ? 'Ready, on this computer' : 'Speech models not downloaded yet' }}</p>
             <p class="hint">Texts and recordings are kept on this computer, in<br /><code>{{ h.data }}</code></p>
           } @else if (health.error()) {
-            <p class="bad">Not running. Start it with <code>python engine/server.py</code>.</p>
+            <p class="bad">The speech engine is not answering.</p>
           }
         </section>
       </div>
@@ -139,7 +139,7 @@ export class Settings {
   protected readonly themes: Theme[] = ['system', 'light', 'dark'];
   protected theme = signal<Theme>(readSetting<Theme>('theme', 'system'));
   private check = signal(0);
-  protected health = resource({ params: () => this.check(), loader: () => this.engine.health() });
+  protected health = resource({ params: () => this.check(), loader: () => this.engine.info() });
 
   open() {
     this.check.update((n) => n + 1);

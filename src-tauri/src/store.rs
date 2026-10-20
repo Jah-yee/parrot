@@ -36,7 +36,7 @@ pub struct PartScore {
     pub tries: usize,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Attempt {
     pub id: String,
     pub when: String,

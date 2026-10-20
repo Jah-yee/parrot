@@ -1,17 +1,38 @@
 import { Injectable } from '@angular/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Activity, Attempt, AttemptSummary, Mode, PartScore, SoundsLike, TextItem } from './models';
 
-/** The local speech engine (engine/server.py for now). */
-export const ENGINE = 'http://127.0.0.1:8770';
+/** True inside the desktop app: the engine is built in. In a plain browser (development, screenshots) the
+ * interface talks to the Python prototype engine over HTTP instead. */
+export const IN_APP = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+/** The Python prototype engine (engine/server.py), for working in a browser. */
+export const DEV_ENGINE = 'http://127.0.0.1:8770';
 
 export class EngineError extends Error {}
 
+export interface EngineInfo {
+  data: string;
+  /** whether each speech model is downloaded */
+  models: Record<'whisper' | 'aligner', boolean>;
+  sizes: Record<'whisper' | 'aligner', number>;
+}
+
+export interface ModelProgress {
+  model: 'whisper' | 'aligner';
+  received: number;
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class Engine {
-  private async call<T>(path: string, init?: RequestInit): Promise<T> {
+  private dataDir = '';
+
+  private async http<T>(path: string, init?: RequestInit): Promise<T> {
     let res: Response;
     try {
-      res = await fetch(ENGINE + path, init);
+      res = await fetch(DEV_ENGINE + path, init);
     } catch {
       throw new EngineError('The speech engine is not running. Start it with: python engine/server.py');
     }
@@ -20,70 +41,102 @@ export class Engine {
     return body as T;
   }
 
-  private post<T>(path: string, data: unknown): Promise<T> {
-    return this.call<T>(path, { method: 'POST', body: JSON.stringify(data) });
+  private async app<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+    try {
+      return await invoke<T>(cmd, args);
+    } catch (e) {
+      throw new EngineError(typeof e === 'string' ? e : String(e));
+    }
   }
 
-  health() {
-    return this.call<{ ok: boolean; data: string; whisper: boolean }>('/api/health');
+  private post<T>(path: string, data: unknown): Promise<T> {
+    return this.http<T>(path, { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  /** Where the data is kept and whether the speech models are ready. */
+  async info(): Promise<EngineInfo> {
+    if (IN_APP) {
+      const i = await this.app<EngineInfo>('info');
+      this.dataDir = i.data;
+      return i;
+    }
+    const h = await this.http<{ data: string; whisper: boolean }>('/api/health');
+    this.dataDir = h.data;
+    return { data: h.data, models: { whisper: h.whisper, aligner: true }, sizes: { whisper: 0, aligner: 0 } };
+  }
+
+  /** Download the missing speech models, reporting progress. */
+  async downloadModels(onProgress: (p: ModelProgress) => void): Promise<void> {
+    const stop = await listen<ModelProgress>('model-progress', (e) => onProgress(e.payload));
+    try {
+      await this.app('download_models');
+    } finally {
+      stop();
+    }
   }
 
   texts() {
-    return this.call<TextItem[]>('/api/texts');
+    return IN_APP ? this.app<TextItem[]>('texts') : this.http<TextItem[]>('/api/texts');
   }
 
   addText(text: string, title: string, mode: Mode) {
-    return this.post<TextItem>('/api/texts', { text, title, mode });
+    return IN_APP ? this.app<TextItem>('add_text', { text, title, mode }) : this.post<TextItem>('/api/texts', { text, title, mode });
   }
 
   updateText(id: string, change: { title?: string; mode?: Mode; opened?: boolean }) {
-    return this.post<TextItem>('/api/texts/update', { id, ...change });
+    return IN_APP ? this.app<TextItem>('update_text', { id, ...change }) : this.post<TextItem>('/api/texts/update', { id, ...change });
   }
 
   deleteText(id: string) {
-    return this.post<{ ok: boolean }>('/api/texts/delete', { id });
+    return IN_APP ? this.app<void>('delete_text', { id }) : this.post<void>('/api/texts/delete', { id });
   }
 
   scores(textId: string) {
-    return this.call<Record<string, PartScore>>(`/api/scores?text=${textId}`);
+    return IN_APP
+      ? this.app<Record<string, PartScore>>('scores', { text: textId })
+      : this.http<Record<string, PartScore>>(`/api/scores?text=${textId}`);
   }
 
   attempts(textId: string, part: string) {
-    return this.call<AttemptSummary[]>(`/api/attempts?text=${textId}&part=${encodeURIComponent(part)}`);
+    return IN_APP
+      ? this.app<AttemptSummary[]>('attempts', { text: textId, part })
+      : this.http<AttemptSummary[]>(`/api/attempts?text=${textId}&part=${encodeURIComponent(part)}`);
   }
 
   attempt(textId: string, part: string, id: string) {
-    return this.call<Attempt>(`/api/attempt?text=${textId}&part=${encodeURIComponent(part)}&id=${id}`);
+    return IN_APP
+      ? this.app<Attempt>('attempt', { text: textId, part, id })
+      : this.http<Attempt>(`/api/attempt?text=${textId}&part=${encodeURIComponent(part)}&id=${id}`);
   }
 
-  check(textId: string, part: string, audio: Blob) {
-    return this.call<Attempt>(`/api/check?text=${textId}&part=${encodeURIComponent(part)}`, {
+  /** Score a take (a WAV recording) of one part of a text. */
+  async check(textId: string, part: string, audio: Blob) {
+    if (IN_APP) {
+      const bytes = new Uint8Array(await audio.arrayBuffer());
+      try {
+        return await invoke<Attempt>('check', bytes, { headers: { 'x-text': textId, 'x-part': encodeURIComponent(part) } });
+      } catch (e) {
+        throw new EngineError(typeof e === 'string' ? e : String(e));
+      }
+    }
+    return this.http<Attempt>(`/api/check?text=${textId}&part=${encodeURIComponent(part)}`, {
       method: 'POST',
-      headers: { 'Content-Type': audio.type || 'audio/webm' },
+      headers: { 'Content-Type': audio.type || 'audio/wav' },
       body: audio,
     });
   }
 
   activity() {
-    return this.call<Activity>('/api/activity');
-  }
-
-  /** The loudness of a saved recording in n slices, 0-1, for the waveform. */
-  peaks(path: string, n: number) {
-    return this.call<number[]>(`/api/peaks?f=${encodeURIComponent(path)}&n=${n}`);
+    return IN_APP ? this.app<Activity>('activity') : this.http<Activity>('/api/activity');
   }
 
   soundsLike(word: string) {
-    return this.call<SoundsLike>(`/api/pron?w=${encodeURIComponent(word)}`);
+    return IN_APP ? this.app<SoundsLike>('pron', { w: word }) : this.http<SoundsLike>(`/api/pron?w=${encodeURIComponent(word)}`);
   }
 
-  /** URL of a saved recording. */
+  /** URL of a saved recording (paths from the first engine start with /files/). */
   audioUrl(path: string) {
-    return ENGINE + path;
-  }
-
-  /** URL of a stretch of a recording cut exactly, optionally slowed down without lowering the pitch. */
-  clipUrl(path: string, from: number, to: number, rate = 1) {
-    return `${ENGINE}/clip?f=${encodeURIComponent(path)}&a=${from.toFixed(3)}&b=${to.toFixed(3)}&rate=${rate}`;
+    const rel = path.replace(/^\/?files\//, '').replace(/^\//, '');
+    return IN_APP ? convertFileSrc(`${this.dataDir}/${rel}`) : `${DEV_ENGINE}/files/${rel}`;
   }
 }

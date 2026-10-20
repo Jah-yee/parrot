@@ -1,4 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { Clips } from './clips';
 import { Engine, EngineError } from './engine';
 import { Activity, Attempt, AttemptSummary, Mode, Part, PartScore, TextItem } from './models';
 import { Recorder } from './recorder';
@@ -10,6 +11,7 @@ import { bare, splitText } from './split';
 @Injectable({ providedIn: 'root' })
 export class Store {
   private engine = inject(Engine);
+  private clips = inject(Clips);
   readonly sound = inject(Sound);
   readonly recorder = inject(Recorder);
 
@@ -165,8 +167,8 @@ export class Store {
   private show(r: Attempt) {
     this.result.set(r);
     this.peaks.set(null);
-    this.engine
-      .peaks(r.audio, this.bars)
+    this.clips
+      .peaks(this.engine.audioUrl(r.audio), this.bars)
       .then((p) => this.result() === r && this.peaks.set(p))
       .catch(() => {});
   }
@@ -270,7 +272,10 @@ export class Store {
     const b = Math.min(after?.t ? after.t[0] : w.t[1] + 0.12, w.t[1] + 0.04);
     this.run++;
     this.nowMine.set(k);
-    return this.sound.playClip(this.engine.clipUrl(r.audio, a, b)).then(() => this.nowMine.set(null));
+    return this.clips
+      .cut(this.engine.audioUrl(r.audio), a, b)
+      .then((url) => this.sound.playClip(url).finally(() => URL.revokeObjectURL(url)))
+      .then(() => this.nowMine.set(null));
   }
 
   async compareWord(k: number) {
