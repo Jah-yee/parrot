@@ -74,7 +74,7 @@ export class ScoreRing {
   readonly score = input.required<number>();
   protected readonly tone = computed(() => band(this.score()));
   protected readonly dash = computed(() => {
-    const c = 2 * Math.PI * 27;
-    return `${(c * this.score()) / 100} ${c}`;
+    const circumference = 2 * Math.PI * 27;
+    return `${(circumference * this.score()) / 100} ${circumference}`;
   });
 }

@@ -43,22 +43,28 @@ export class Store {
   readonly words = computed(() => this.part()?.text.split(' ') ?? []);
   readonly progress = computed(() => {
     const parts = this.parts();
-    const s = this.scores();
-    const done = parts.filter((p) => s[p.key]);
-    const avg = done.length ? Math.round(done.reduce((a, p) => a + s[p.key].last, 0) / done.length) : null;
+    const scores = this.scores();
+    const done = parts.filter((part) => scores[part.key]);
+    const avg = done.length
+      ? Math.round(done.reduce((sum, part) => sum + scores[part.key].last, 0) / done.length)
+      : null;
     return { total: parts.length, done: done.length, avg };
   });
 
   /** the score of the try before the one shown */
   readonly previousScore = computed(() => {
-    const r = this.result();
-    const h = this.history();
-    const i = h.findIndex((x) => x.id === r?.id);
-    return i >= 0 && i + 1 < h.length ? h[i + 1].score : null;
+    const result = this.result();
+    const history = this.history();
+    const shownIndex = history.findIndex((attempt) => attempt.id === result?.id);
+    return shownIndex >= 0 && shownIndex + 1 < history.length
+      ? history[shownIndex + 1].score
+      : null;
   });
   /** words of the shown try that came out wrong, for the reading tips */
   readonly troubleWords = computed(() =>
-    (this.result()?.words ?? []).filter((w) => w.status === 'wrong').map((w) => bare(w.w)),
+    (this.result()?.words ?? [])
+      .filter((word) => word.status === 'wrong')
+      .map((word) => bare(word.w)),
   );
 
   /** every play chain (mine, then the reference) checks this, so Stop really stops it */
@@ -69,9 +75,9 @@ export class Store {
       this.texts.set(await this.engine.texts());
       this.engineState.set('ready');
       this.error.set(null);
-    } catch (e) {
+    } catch (error) {
       this.engineState.set('down');
-      this.fail(e);
+      this.fail(error);
       // try again until the engine is up, so starting it is enough
       setTimeout(() => this.engineState() === 'down' && this.loadTexts().then(() => this.loadActivity()), 3000);
     } finally {
@@ -85,14 +91,17 @@ export class Store {
 
   /** Open a text at a part: the given one, else where it was left. */
   async open(id: string, index?: number) {
-    const t = this.texts().find((x) => x.id === id);
-    if (!t) return;
+    const text = this.texts().find((item) => item.id === id);
+    if (!text) return;
     this.stop();
-    this.text.set(t);
+    this.text.set(text);
     this.view.set('practice');
     writeSetting('text', id);
     this.engine.updateText(id, { opened: true }).catch(() => {});
-    await this.build(t.mode, index != null ? String(index) : readSetting(`part:${id}:${t.mode}`, '0'));
+    await this.build(
+      text.mode,
+      index != null ? String(index) : readSetting(`part:${id}:${text.mode}`, '0'),
+    );
   }
 
   home() {
@@ -104,72 +113,73 @@ export class Store {
 
   async add(text: string, title: string, mode: Mode) {
     try {
-      const t = await this.engine.addText(text, title, mode);
-      this.texts.update((list) => [t, ...list.filter((x) => x.id !== t.id)]);
-      await this.open(t.id);
-    } catch (e) {
-      this.fail(e);
+      const added = await this.engine.addText(text, title, mode);
+      this.texts.update((list) => [added, ...list.filter((item) => item.id !== added.id)]);
+      await this.open(added.id);
+    } catch (error) {
+      this.fail(error);
     }
   }
 
   async rename(id: string, title: string) {
-    const t = await this.engine.updateText(id, { title });
-    this.texts.update((list) => list.map((x) => (x.id === id ? t : x)));
-    if (this.text()?.id === id) this.text.set(t);
+    const renamed = await this.engine.updateText(id, { title });
+    this.texts.update((list) => list.map((item) => (item.id === id ? renamed : item)));
+    if (this.text()?.id === id) this.text.set(renamed);
   }
 
   async remove(id: string) {
     await this.engine.deleteText(id);
-    this.texts.update((list) => list.filter((x) => x.id !== id));
+    this.texts.update((list) => list.filter((item) => item.id !== id));
   }
 
   async setMode(mode: Mode) {
-    const t = this.text();
-    if (!t || t.mode === mode) return;
+    const text = this.text();
+    if (!text || text.mode === mode) return;
     const w0 = this.part()?.w0 ?? 0;
     this.stop();
-    const saved = await this.engine.updateText(t.id, { mode });
+    const saved = await this.engine.updateText(text.id, { mode });
     this.text.set(saved);
-    this.texts.update((list) => list.map((x) => (x.id === t.id ? saved : x)));
+    this.texts.update((list) => list.map((item) => (item.id === text.id ? saved : item)));
     await this.build(mode, null, w0);
   }
 
   /** Split the open text and go to a part: the saved one, or the one holding word w0. */
   private async build(mode: Mode, savedIndex: string | null, w0?: number) {
-    const t = this.text()!;
-    const parts = await splitText(t.text, mode);
+    const text = this.text()!;
+    const parts = await splitText(text.text, mode);
     this.parts.set(parts);
-    this.scores.set(await this.engine.scores(t.id).catch(() => ({})));
-    let i = w0 != null ? parts.findLastIndex((p) => p.w0 <= w0) : Number(savedIndex ?? 0);
-    if (!(i >= 0 && i < parts.length)) i = 0;
-    await this.select(i);
+    this.scores.set(await this.engine.scores(text.id).catch(() => ({})));
+    let partIndex =
+      w0 != null ? parts.findLastIndex((part) => part.w0 <= w0) : Number(savedIndex ?? 0);
+    if (!(partIndex >= 0 && partIndex < parts.length)) partIndex = 0;
+    await this.select(partIndex);
   }
 
-  async select(i: number) {
-    const t = this.text();
+  async select(partIndex: number) {
+    const text = this.text();
     const parts = this.parts();
-    if (!t || i < 0 || i >= parts.length) return;
+    if (!text || partIndex < 0 || partIndex >= parts.length) return;
     this.stop();
-    this.index.set(i);
+    this.index.set(partIndex);
     this.result.set(null);
     this.history.set([]);
     this.selected.set(null);
-    writeSetting(`part:${t.id}:${t.mode}`, String(i));
-    const p = parts[i];
-    if (!this.scores()[p.key]) return;
-    const history = await this.engine.attempts(t.id, p.text);
-    if (this.part() !== p || !history.length) return;
+    writeSetting(`part:${text.id}:${text.mode}`, String(partIndex));
+    const part = parts[partIndex];
+    if (!this.scores()[part.key]) return;
+    const history = await this.engine.attempts(text.id, part.text);
+    if (this.part() !== part || !history.length) return;
     this.history.set(history);
-    this.show(await this.engine.attempt(t.id, p.text, history[0].id));
+    this.show(await this.engine.attempt(text.id, part.text, history[0].id));
   }
 
   /** Show a try, and load its waveform. */
-  private show(r: Attempt) {
-    this.result.set(r);
+  private show(attempt: Attempt) {
+    this.result.set(attempt);
     this.peaks.set(null);
     this.clips
-      .peaks(this.engine.audioUrl(r.audio), this.bars)
-      .then((p) => this.result() === r && this.peaks.set(p))
+      .peaks(this.engine.audioUrl(attempt.audio), this.bars)
+      .then((peaks) => this.result() === attempt && this.peaks.set(peaks))
       .catch(() => {});
   }
 
@@ -182,41 +192,47 @@ export class Store {
   }
 
   async showAttempt(id: string) {
-    const t = this.text();
-    const p = this.part();
-    if (!t || !p) return;
+    const text = this.text();
+    const part = this.part();
+    if (!text || !part) return;
     this.stop();
-    this.show(await this.engine.attempt(t.id, p.text, id));
+    this.show(await this.engine.attempt(text.id, part.text, id));
   }
 
-  setRate(r: number) {
-    this.rate.set(r);
-    writeSetting('rate', String(r));
+  setRate(rate: number) {
+    this.rate.set(rate);
+    writeSetting('rate', String(rate));
   }
 
   // ---- listening
 
   /** The reference reading of the part, with the word being spoken lit up. */
   playReference() {
-    const p = this.part();
-    if (!p) return Promise.resolve();
+    const part = this.part();
+    if (!part) return Promise.resolve();
     const starts: number[] = [];
-    let c = 0;
-    for (const w of p.text.split(' ')) {
-      starts.push(c);
-      c += w.length + 1;
+    let offset = 0;
+    for (const word of part.text.split(' ')) {
+      starts.push(offset);
+      offset += word.length + 1;
     }
     return this.sound
-      .speak(p.text, this.rate(), 'ref', (ci) => this.nowRef.set(starts.findLastIndex((s) => s <= ci)))
+      .speak(part.text, this.rate(), 'ref', (charIndex) =>
+        this.nowRef.set(starts.findLastIndex((start) => start <= charIndex)),
+      )
       .then(() => this.nowRef.set(null));
   }
 
   playMine() {
-    const r = this.result();
-    if (!r) return Promise.resolve();
+    const result = this.result();
+    if (!result) return Promise.resolve();
     return this.sound
-      .play(this.engine.audioUrl(r.audio), 'mine', (t) =>
-        this.nowMine.set(r.words.findIndex((w) => w.t && t >= w.t[0] - 0.02 && t <= w.t[1] + 0.06)),
+      .play(this.engine.audioUrl(result.audio), 'mine', (seconds) =>
+        this.nowMine.set(
+          result.words.findIndex(
+            (word) => word.t && seconds >= word.t[0] - 0.02 && seconds <= word.t[1] + 0.06,
+          ),
+        ),
       )
       .then(() => this.nowMine.set(null));
   }
@@ -235,7 +251,7 @@ export class Store {
     const run = ++this.run;
     await this.playMine();
     if (run !== this.run) return;
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((resolve) => setTimeout(resolve, 400));
     if (run === this.run) this.playReference();
   }
 
@@ -248,42 +264,45 @@ export class Store {
 
   // ---- words
 
-  selectWord(k: number | null) {
-    this.selected.set(k);
+  selectWord(wordIndex: number | null) {
+    this.selected.set(wordIndex);
   }
 
   /** How the word should sound: spoken on its own by the reference voice. */
-  sayWord(k: number, slow = false) {
-    const w = this.words()[k];
-    if (w) {
+  sayWord(wordIndex: number, slow = false) {
+    const word = this.words()[wordIndex];
+    if (word) {
       this.run++;
-      this.sound.speak(bare(w), slow ? 0.55 : 0.85, null);
+      this.sound.speak(bare(word), slow ? 0.55 : 0.85, null);
     }
   }
 
   /** The word as you said it, cut out of your recording. */
-  playMyWord(k: number) {
-    const r = this.result();
-    const w = r?.words[k];
-    if (!r || !w?.t) return Promise.resolve();
-    const before = r.words.slice(0, k).reverse().find((x) => x.t);
-    const after = r.words.slice(k + 1).find((x) => x.t);
-    const a = Math.max(before?.t ? before.t[1] : 0, w.t[0] - 0.03);
-    const b = Math.min(after?.t ? after.t[0] : w.t[1] + 0.12, w.t[1] + 0.04);
+  playMyWord(wordIndex: number) {
+    const result = this.result();
+    const word = result?.words[wordIndex];
+    if (!result || !word?.t) return Promise.resolve();
+    const before = result.words
+      .slice(0, wordIndex)
+      .reverse()
+      .find((other) => other.t);
+    const after = result.words.slice(wordIndex + 1).find((other) => other.t);
+    const from = Math.max(before?.t ? before.t[1] : 0, word.t[0] - 0.03);
+    const to = Math.min(after?.t ? after.t[0] : word.t[1] + 0.12, word.t[1] + 0.04);
     this.run++;
-    this.nowMine.set(k);
+    this.nowMine.set(wordIndex);
     return this.clips
-      .cut(this.engine.audioUrl(r.audio), a, b)
+      .cut(this.engine.audioUrl(result.audio), from, to)
       .then((url) => this.sound.playClip(url).finally(() => URL.revokeObjectURL(url)))
       .then(() => this.nowMine.set(null));
   }
 
-  async compareWord(k: number) {
+  async compareWord(wordIndex: number) {
     const run = ++this.run;
-    await this.playMyWord(k);
+    await this.playMyWord(wordIndex);
     if (run !== this.run) return;
-    await new Promise((r) => setTimeout(r, 350));
-    if (run === this.run) this.sayWord(k);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    if (run === this.run) this.sayWord(wordIndex);
   }
 
   soundsLike(word: string) {
@@ -299,37 +318,43 @@ export class Store {
     try {
       await this.recorder.start();
       this.error.set(null);
-    } catch (e) {
-      this.error.set(`No microphone: ${(e as Error).message}. Allow Parrot to use the microphone.`);
+    } catch (error) {
+      this.error.set(
+        `No microphone: ${(error as Error).message}. Allow Parrot to use the microphone.`,
+      );
     }
   }
 
   private async finishRecording() {
-    const t = this.text()!;
-    const p = this.part()!;
+    const text = this.text()!;
+    const part = this.part()!;
     const blob = await this.recorder.stop();
     this.checking.set(true);
     try {
-      const r = await this.engine.check(t.id, p.text, blob);
-      this.scores.update((s) => ({
-        ...s,
-        [p.key]: { last: r.score, best: Math.max(r.score, s[p.key]?.best ?? 0), tries: (s[p.key]?.tries ?? 0) + 1 },
+      const attempt = await this.engine.check(text.id, part.text, blob);
+      this.scores.update((scores) => ({
+        ...scores,
+        [part.key]: {
+          last: attempt.score,
+          best: Math.max(attempt.score, scores[part.key]?.best ?? 0),
+          tries: (scores[part.key]?.tries ?? 0) + 1,
+        },
       }));
       this.loadTexts();
-      if (this.part() !== p) return;
-      this.history.set(await this.engine.attempts(t.id, p.text));
-      this.show(r);
-      const first = r.words.findIndex((w) => w.status !== 'good');
+      if (this.part() !== part) return;
+      this.history.set(await this.engine.attempts(text.id, part.text));
+      this.show(attempt);
+      const first = attempt.words.findIndex((word) => word.status !== 'good');
       this.selected.set(first >= 0 ? first : null);
       this.error.set(null);
-    } catch (e) {
-      this.fail(e);
+    } catch (error) {
+      this.fail(error);
     } finally {
       this.checking.set(false);
     }
   }
 
-  private fail(e: unknown) {
-    this.error.set(e instanceof EngineError ? e.message : String(e));
+  private fail(error: unknown) {
+    this.error.set(error instanceof EngineError ? error.message : String(error));
   }
 }

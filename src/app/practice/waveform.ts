@@ -10,8 +10,8 @@ type Tone = 'idle' | 'plain' | 'wrong' | 'unclear' | 'now' | 'live';
 @Component({
   selector: 'app-waveform',
   template: `
-    @for (b of shown(); track $index) {
-      <span [class]="b.tone" [style.height.px]="b.h"></span>
+    @for (bar of shown(); track $index) {
+      <span [class]="bar.tone" [style.height.px]="bar.h"></span>
     }
   `,
   styles: `
@@ -60,27 +60,27 @@ export class Waveform {
   readonly live = input<number[] | null>(null);
 
   protected readonly shown = computed(() => {
-    const n = this.bars();
+    const barCount = this.bars();
     const live = this.live();
-    const height = (v: number) => 6 + Math.round(v * 44);
+    const height = (level: number) => 6 + Math.round(level * 44);
     if (live) {
-      const tail = live.slice(-n);
-      return Array.from({ length: n }, (_, i) =>
-        i < tail.length ? { h: height(tail[i]), tone: 'live' as Tone } : { h: 6, tone: 'idle' as Tone },
+      const tail = live.slice(-barCount);
+      return Array.from({ length: barCount }, (_, barIndex) =>
+        barIndex < tail.length ? { h: height(tail[barIndex]), tone: 'live' as Tone } : { h: 6, tone: 'idle' as Tone },
       );
     }
     const peaks = this.peaks();
-    if (!peaks?.length) return Array.from({ length: n }, () => ({ h: 6, tone: 'idle' as Tone }));
-    const d = this.duration() || 1;
+    if (!peaks?.length) return Array.from({ length: barCount }, () => ({ h: 6, tone: 'idle' as Tone }));
+    const duration = this.duration() || 1;
     const words = this.words();
     const now = this.now();
-    return peaks.map((v, i) => {
-      const a = (i / peaks.length) * d;
-      const b = ((i + 1) / peaks.length) * d;
-      const k = words.findIndex((w) => w.t && w.t[0] < b && w.t[1] > a);
-      const w = words[k];
-      const tone: Tone = k >= 0 && k === now ? 'now' : w?.status === 'wrong' ? 'wrong' : w?.status === 'unclear' ? 'unclear' : 'plain';
-      return { h: height(v), tone };
+    return peaks.map((peak, barIndex) => {
+      const start = (barIndex / peaks.length) * duration;
+      const end = ((barIndex + 1) / peaks.length) * duration;
+      const wordIndex = words.findIndex((word) => word.t && word.t[0] < end && word.t[1] > start);
+      const word = words[wordIndex];
+      const tone: Tone = wordIndex >= 0 && wordIndex === now ? 'now' : word?.status === 'wrong' ? 'wrong' : word?.status === 'unclear' ? 'unclear' : 'plain';
+      return { h: height(peak), tone };
     });
   });
 }

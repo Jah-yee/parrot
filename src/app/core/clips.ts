@@ -10,32 +10,35 @@ export class Clips {
   private cache = new Map<string, Promise<AudioBuffer>>();
 
   private decode(url: string): Promise<AudioBuffer> {
-    let p = this.cache.get(url);
-    if (!p) {
+    let decoded = this.cache.get(url);
+    if (!decoded) {
       this.ctx ??= new AudioContext();
       const ctx = this.ctx;
-      p = fetch(url)
-        .then((r) => r.arrayBuffer())
-        .then((b) => ctx.decodeAudioData(b));
-      p.catch(() => this.cache.delete(url));
-      this.cache.set(url, p);
+      decoded = fetch(url)
+        .then((response) => response.arrayBuffer())
+        .then((bytes) => ctx.decodeAudioData(bytes));
+      decoded.catch(() => this.cache.delete(url));
+      this.cache.set(url, decoded);
       if (this.cache.size > 8) this.cache.delete(this.cache.keys().next().value!);
     }
-    return p;
+    return decoded;
   }
 
-  /** The loudest sample of each of n equal slices of a take, scaled so the loudest slice is 1. */
-  async peaks(url: string, n: number): Promise<number[]> {
+  /** The loudest sample of each of sliceCount equal slices of a take, scaled so the loudest slice is 1. */
+  async peaks(url: string, sliceCount: number): Promise<number[]> {
     const data = (await this.decode(url)).getChannelData(0);
-    const size = Math.max(1, Math.floor(data.length / n));
+    const size = Math.max(1, Math.floor(data.length / sliceCount));
     const out: number[] = [];
-    for (let i = 0; i < n; i++) {
-      let m = 0;
-      for (let k = i * size; k < Math.min(data.length, (i + 1) * size); k++) m = Math.max(m, Math.abs(data[k]));
-      out.push(m);
+    for (let sliceIndex = 0; sliceIndex < sliceCount; sliceIndex++) {
+      let loudest = 0;
+      const sliceEnd = Math.min(data.length, (sliceIndex + 1) * size);
+      for (let sampleIndex = sliceIndex * size; sampleIndex < sliceEnd; sampleIndex++) {
+        loudest = Math.max(loudest, Math.abs(data[sampleIndex]));
+      }
+      out.push(loudest);
     }
     const top = Math.max(...out) || 1;
-    return out.map((v) => v / top);
+    return out.map((peak) => peak / top);
   }
 
   /** A stretch of a take as a WAV file (an object URL): played with playbackRate below 1 and pitch preserved, it
@@ -43,14 +46,19 @@ export class Clips {
   async cut(url: string, from: number, to: number): Promise<string> {
     const buf = await this.decode(url);
     const rate = buf.sampleRate;
-    const a = Math.max(0, Math.floor(from * rate));
-    const b = Math.min(buf.length, Math.ceil(to * rate));
-    const src = buf.getChannelData(0).subarray(a, b);
+    const firstSample = Math.max(0, Math.floor(from * rate));
+    const endSample = Math.min(buf.length, Math.ceil(to * rate));
+    const src = buf.getChannelData(0).subarray(firstSample, endSample);
     const fade = Math.min(Math.floor(rate * 0.012), Math.floor(src.length / 4));
     const pcm = new Int16Array(src.length + Math.floor(rate * 0.05)); // a little silence after, so the end isn't clipped
-    for (let i = 0; i < src.length; i++) {
-      const g = i < fade ? i / fade : i > src.length - fade ? (src.length - i) / fade : 1;
-      pcm[i] = Math.max(-1, Math.min(1, src[i] * g)) * 32767;
+    for (let sampleIndex = 0; sampleIndex < src.length; sampleIndex++) {
+      const gain =
+        sampleIndex < fade
+          ? sampleIndex / fade
+          : sampleIndex > src.length - fade
+            ? (src.length - sampleIndex) / fade
+            : 1;
+      pcm[sampleIndex] = Math.max(-1, Math.min(1, src[sampleIndex] * gain)) * 32767;
     }
     return URL.createObjectURL(wav(pcm, rate));
   }
@@ -59,7 +67,8 @@ export class Clips {
 /** 16-bit mono PCM as a WAV file. */
 export function wav(pcm: Int16Array, rate: number): Blob {
   const head = new DataView(new ArrayBuffer(44));
-  const text = (o: number, s: string) => [...s].forEach((c, i) => head.setUint8(o + i, c.charCodeAt(0)));
+  const text = (offset: number, label: string) =>
+    [...label].forEach((char, charIndex) => head.setUint8(offset + charIndex, char.charCodeAt(0)));
   text(0, 'RIFF');
   head.setUint32(4, 36 + pcm.byteLength, true);
   text(8, 'WAVEfmt ');

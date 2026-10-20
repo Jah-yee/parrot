@@ -25,8 +25,8 @@ static DICT: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
 });
 
 /// respelling and IPA of each vowel
-fn vowel(p: &str) -> Option<(&'static str, &'static str)> {
-    Some(match p {
+fn vowel(phone: &str) -> Option<(&'static str, &'static str)> {
+    Some(match phone {
         "AA" => ("aa", "ɑ"), "AE" => ("a", "æ"), "AH" => ("uh", "ʌ"), "AO" => ("aw", "ɔ"), "AW" => ("ow", "aʊ"),
         "AY" => ("ai", "aɪ"), "EH" => ("eh", "ɛ"), "ER" => ("ur", "ɝ"), "EY" => ("ay", "eɪ"), "IH" => ("i", "ɪ"),
         "IY" => ("ee", "i"), "OW" => ("oh", "oʊ"), "OY" => ("oy", "ɔɪ"), "UH" => ("u", "ʊ"), "UW" => ("oo", "u"),
@@ -35,8 +35,8 @@ fn vowel(p: &str) -> Option<(&'static str, &'static str)> {
 }
 
 /// respelling and IPA of each consonant
-fn consonant(p: &str) -> (&'static str, &'static str) {
-    match p {
+fn consonant(phone: &str) -> (&'static str, &'static str) {
+    match phone {
         "B" => ("b", "b"), "CH" => ("ch", "tʃ"), "D" => ("d", "d"), "DH" => ("dh", "ð"), "F" => ("f", "f"),
         "G" => ("g", "ɡ"), "HH" => ("h", "h"), "JH" => ("j", "dʒ"), "K" => ("k", "k"), "L" => ("l", "l"),
         "M" => ("m", "m"), "N" => ("n", "n"), "NG" => ("ng", "ŋ"), "P" => ("p", "p"), "R" => ("r", "ɹ"),
@@ -51,34 +51,38 @@ static ONSETS: LazyLock<HashSet<Vec<&'static str>>> = LazyLock::new(|| {
     "P R|P L|B R|B L|T R|D R|K R|K L|G R|G L|F R|F L|TH R|SH R|S P|S T|S K|S M|S N|S L|S W|T W|D W|K W|G W|TH W|\
      S P R|S T R|S K R|S P L|S K W|P Y|B Y|K Y|F Y|M Y|V Y|HH Y|G Y|S K Y|S P Y"
         .split('|')
-        .map(|o| o.split(' ').collect())
+        .map(|onset| onset.split(' ').collect())
         .collect()
 });
 
 /// Every vowel a syllable; the consonants between two vowels go to the second as the longest legal onset
 /// ("six-teen": S IH K | S T IY N).
 fn syllables(phones: &[String]) -> Vec<(&[String], Option<u8>)> {
-    let vi: Vec<usize> = (0..phones.len()).filter(|&k| phones[k].ends_with(|c: char| c.is_ascii_digit())).collect();
+    let vi: Vec<usize> =
+        (0..phones.len()).filter(|&phone_index| phones[phone_index].ends_with(|character: char| character.is_ascii_digit())).collect();
     if vi.is_empty() {
         return vec![(phones, None)];
     }
     let mut cuts = vec![0];
-    for w in vi.windows(2) {
-        let mid: Vec<&str> = phones[w[0] + 1..w[1]].iter().map(String::as_str).collect();
-        let mut n = 0;
-        for m in (1..=mid.len()).rev() {
-            let tail = mid[mid.len() - m..].to_vec();
-            if (m == 1 && mid[mid.len() - 1] != "NG") || ONSETS.contains(&tail) {
-                n = m;
+    for vowel_pair in vi.windows(2) {
+        let mid: Vec<&str> = phones[vowel_pair[0] + 1..vowel_pair[1]].iter().map(String::as_str).collect();
+        let mut onset_len = 0;
+        for candidate_len in (1..=mid.len()).rev() {
+            let tail = mid[mid.len() - candidate_len..].to_vec();
+            if (candidate_len == 1 && mid[mid.len() - 1] != "NG") || ONSETS.contains(&tail) {
+                onset_len = candidate_len;
                 break;
             }
         }
-        cuts.push(w[1] - n);
+        cuts.push(vowel_pair[1] - onset_len);
     }
     cuts.push(phones.len());
     cuts.windows(2)
         .zip(&vi)
-        .map(|(c, &v)| (&phones[c[0]..c[1]], phones[v].chars().last().and_then(|c| c.to_digit(10)).map(|d| d as u8)))
+        .map(|(bounds, &vowel_index)| {
+            let stress = phones[vowel_index].chars().last().and_then(|stress_mark| stress_mark.to_digit(10)).map(|digit| digit as u8);
+            (&phones[bounds[0]..bounds[1]], stress)
+        })
         .collect()
 }
 
@@ -93,42 +97,42 @@ pub fn sounds_like(word: &str) -> Option<SoundsLike> {
     let lower = word.to_lowercase().replace('\u{2019}', "'");
     let mut spell = vec![];
     let mut ipas = vec![];
-    for part in lower.split(['-', '–', '—', '/']).filter(|p| !p.is_empty()) {
-        let w: String = part.chars().filter(|c| c.is_ascii_lowercase() || *c == '\'').collect();
-        let phones = DICT.get(w.trim_matches('\''))?;
+    for part in lower.split(['-', '–', '—', '/']).filter(|piece| !piece.is_empty()) {
+        let letters: String = part.chars().filter(|character| character.is_ascii_lowercase() || *character == '\'').collect();
+        let phones = DICT.get(letters.trim_matches('\''))?;
         let mut ipa = vec![];
         for (syl, stress) in syllables(phones) {
-            let (mut s, mut i) = (String::new(), String::new());
-            for (k, p) in syl.iter().enumerate() {
-                let digit = p.chars().last().filter(|c| c.is_ascii_digit());
-                let base = if digit.is_some() { &p[..p.len() - 1] } else { p.as_str() };
+            let (mut respelling, mut syllable_ipa) = (String::new(), String::new());
+            for (phone_index, phone) in syl.iter().enumerate() {
+                let digit = phone.chars().last().filter(|character| character.is_ascii_digit());
+                let base = if digit.is_some() { &phone[..phone.len() - 1] } else { phone.as_str() };
                 match (digit, vowel(base)) {
-                    (Some(d), Some((mut r, mut v))) => {
-                        if d == '0' {
-                            let rest: Vec<&str> = syl[k + 1..].iter().map(String::as_str).collect();
+                    (Some(stress_digit), Some((mut spelled, mut sound))) => {
+                        if stress_digit == '0' {
+                            let rest: Vec<&str> = syl[phone_index + 1..].iter().map(String::as_str).collect();
                             match base {
-                                "ER" => (r, v) = ("r", "ɚ"),
+                                "ER" => (spelled, sound) = ("r", "ɚ"),
                                 // a weak "uh" before a final n or l after a consonant is the syllabic n/l ("shn", "tl")
-                                "AH" if k > 0 && (rest == ["N"] || rest == ["L"]) => (r, v) = ("", "ə"),
-                                "AH" => (r, v) = ("uh", "ə"),
+                                "AH" if phone_index > 0 && (rest == ["N"] || rest == ["L"]) => (spelled, sound) = ("", "ə"),
+                                "AH" => (spelled, sound) = ("uh", "ə"),
                                 _ => {}
                             }
                         }
-                        s.push_str(r);
-                        i.push_str(v);
+                        respelling.push_str(spelled);
+                        syllable_ipa.push_str(sound);
                     }
                     _ => {
-                        let (r, v) = consonant(base);
-                        s.push_str(r);
-                        i.push_str(v);
+                        let (spelled, sound) = consonant(base);
+                        respelling.push_str(spelled);
+                        syllable_ipa.push_str(sound);
                     }
                 }
             }
-            spell.push((s, stress == Some(1)));
+            spell.push((respelling, stress == Some(1)));
             ipa.push(match stress {
-                Some(1) => format!("ˈ{i}"),
-                Some(2) => format!("ˌ{i}"),
-                _ => i,
+                Some(1) => format!("ˈ{syllable_ipa}"),
+                Some(2) => format!("ˌ{syllable_ipa}"),
+                _ => syllable_ipa,
             });
         }
         ipas.push(ipa.join(".").replace(".ˈ", "ˈ").replace(".ˌ", "ˌ"));
@@ -140,8 +144,14 @@ pub fn sounds_like(word: &str) -> Option<SoundsLike> {
 mod tests {
     use super::*;
 
-    fn spelled(w: &str) -> String {
-        sounds_like(w).unwrap().spell.iter().map(|(s, b)| if *b { s.to_uppercase() } else { s.clone() }).collect::<Vec<_>>().join("·")
+    fn spelled(word: &str) -> String {
+        sounds_like(word)
+            .unwrap()
+            .spell
+            .iter()
+            .map(|(syllable, stressed)| if *stressed { syllable.to_uppercase() } else { syllable.clone() })
+            .collect::<Vec<_>>()
+            .join("·")
     }
 
     #[test]

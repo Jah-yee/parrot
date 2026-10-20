@@ -1,6 +1,10 @@
 import { soundUnits } from './sounds';
 
-const texts = (w: string) => soundUnits(w, [...w].map(() => 1)).map((u) => u.text);
+const texts = (word: string) =>
+  soundUnits(
+    word,
+    [...word].map(() => 1),
+  ).map((unit) => unit.text);
 
 describe('soundUnits', () => {
   it('groups letters that spell one sound', () => {
@@ -19,12 +23,12 @@ describe('soundUnits', () => {
 
   it('scores a unit by its best letter', () => {
     // "things" said as "sinks": th low, ng fine though the model gave the sound to the n
-    const u = soundUnits('things', [0.028, 0.015, 0.974, 0.974, 0.001, 0.986]);
-    expect(u.map((x) => x.level)).toEqual(['bad', 'good', 'good', 'good']);
-    expect(u[0].score).toBeCloseTo(0.028);
+    const units = soundUnits('things', [0.028, 0.015, 0.974, 0.974, 0.001, 0.986]);
+    expect(units.map((unit) => unit.level)).toEqual(['bad', 'good', 'good', 'good']);
+    expect(units[0].score).toBeCloseTo(0.028);
   });
 
   it('has no level without scores', () => {
-    expect(soundUnits('it', []).map((u) => u.level)).toEqual(['none', 'none']);
+    expect(soundUnits('it', []).map((unit) => unit.level)).toEqual(['none', 'none']);
   });
 });

@@ -29,11 +29,11 @@ import { Icon } from '../shared/icon';
       <span class="eyebrow">Sounds like</span>
       @if (sounds.value()?.spell; as spell) {
         <span class="spell">
-          @for (s of spell; track $index; let last = $last) {
-            @if (s[1]) {
-              <b>{{ s[0].toUpperCase() }}</b>
+          @for (syllable of spell; track $index; let last = $last) {
+            @if (syllable[1]) {
+              <b>{{ syllable[0].toUpperCase() }}</b>
             } @else {
-              <span>{{ s[0] }}</span>
+              <span>{{ syllable[0] }}</span>
             }
             @if (!last) {
               <i>·</i>
@@ -54,8 +54,8 @@ import { Icon } from '../shared/icon';
         </div>
         @if (units().length) {
           <div class="units">
-            @for (u of units(); track $index) {
-              <span class="unit" [class]="u.level" [title]="u.score == null ? '' : pct(u.score) + '%'">{{ u.text }}</span>
+            @for (unit of units(); track $index) {
+              <span class="unit" [class]="unit.level" [title]="unit.score == null ? '' : pct(unit.score) + '%'">{{ unit.text }}</span>
             }
           </div>
         }
@@ -210,53 +210,53 @@ export class WordCard {
   protected store = inject(Store);
   protected readonly index = this.store.selected;
   protected readonly raw = computed(() => {
-    const k = this.index();
-    return k == null ? '' : (this.store.words()[k] ?? '');
+    const wordIndex = this.index();
+    return wordIndex == null ? '' : (this.store.words()[wordIndex] ?? '');
   });
   protected readonly word = computed(() => bare(this.raw()));
   protected readonly mine = computed(() => {
-    const k = this.index();
-    return k == null || this.store.recorder.recording() ? null : (this.store.result()?.words[k] ?? null);
+    const wordIndex = this.index();
+    return wordIndex == null || this.store.recorder.recording() ? null : (this.store.result()?.words[wordIndex] ?? null);
   });
   protected readonly sounds = resource({
     params: () => this.word() || undefined,
     loader: ({ params }) => this.store.soundsLike(params),
   });
-  protected pct = (x: number | null) => Math.round((x ?? 0) * 100);
+  protected pct = (score: number | null) => Math.round((score ?? 0) * 100);
   /** the word's sounds as spelled, coloured by how surely each was heard; a word that passed both checks shows no
    * weak sounds (single-letter scores are rough, and a clear word should not look wrong) */
   protected readonly units = computed(() => {
-    const m = this.mine();
-    if (!m?.letters) return [];
-    const units = soundUnits(m.w, m.letters);
-    return m.status === 'good' ? units.map((u) => ({ ...u, level: u.level === 'none' ? u.level : ('good' as const) })) : units;
+    const mine = this.mine();
+    if (!mine?.letters) return [];
+    const units = soundUnits(mine.w, mine.letters);
+    return mine.status === 'good' ? units.map((unit) => ({ ...unit, level: unit.level === 'none' ? unit.level : ('good' as const) })) : units;
   });
   /** the weakest one or two sounds, in words */
   protected readonly weak = computed(() => {
-    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const esc = (text: string) => text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!);
     const off = this.units()
-      .filter((u) => u.level === 'bad' || u.level === 'warn')
-      .sort((a, b) => a.score! - b.score!)
+      .filter((unit) => unit.level === 'bad' || unit.level === 'warn')
+      .sort((first, second) => first.score! - second.score!)
       .slice(0, 2);
     if (!off.length) return '';
-    const said = (u: (typeof off)[0]) => `<b>${esc(u.text)}</b> ${u.level === 'bad' ? 'sounded wrong' : 'sounded off'} (${this.pct(u.score)}%)`;
+    const said = (unit: (typeof off)[0]) => `<b>${esc(unit.text)}</b> ${unit.level === 'bad' ? 'sounded wrong' : 'sounded off'} (${this.pct(unit.score)}%)`;
     return 'The ' + off.map(said).join(', and the ') + '.';
   });
   /** a sentence or two on what happened, as safe HTML (only <b> around text we escape) */
   protected readonly why = computed(() => {
-    const m = this.mine();
-    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-    if (!m) return this.store.result() ? '' : 'Record this part to see how you said it.';
+    const mine = this.mine();
+    const esc = (text: string) => text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!);
+    if (!mine) return this.store.result() ? '' : 'Record this part to see how you said it.';
     const out: string[] = [];
-    if (m.status === 'wrong') {
-      out.push(m.heard ? `Heard as <b>“${esc(m.heard)}”</b>.` : 'Speech recognition did not hear this word.');
+    if (mine.status === 'wrong') {
+      out.push(mine.heard ? `Heard as <b>“${esc(mine.heard)}”</b>.` : 'Speech recognition did not hear this word.');
       // a capitalised word inside the sentence is usually a name
-      const k = this.index() ?? 0;
-      if (k > 0 && /^[A-Z]/.test(this.word()))
+      const wordIndex = this.index() ?? 0;
+      if (wordIndex > 0 && /^[A-Z]/.test(this.word()))
         out.push('Names are often heard as a common word: if you say it the way its owners do, you can ignore the red here.');
     }
-    if (m.status !== 'good' && m.ref != null) out.push(`The reference voice scored ${this.pct(m.ref)}% here.`);
-    if (m.extra) out.push(`Extra words heard after it: “${esc(m.extra)}”.`);
+    if (mine.status !== 'good' && mine.ref != null) out.push(`The reference voice scored ${this.pct(mine.ref)}% here.`);
+    if (mine.extra) out.push(`Extra words heard after it: “${esc(mine.extra)}”.`);
     return out.join(' ');
   });
 }

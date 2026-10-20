@@ -26,25 +26,25 @@ pub struct Engine {
 type Shared = Arc<Engine>;
 
 impl Engine {
-    fn with_aligner<T>(&self, f: impl FnOnce(&mut align::Aligner) -> Result<T, String>) -> Result<T, String> {
+    fn with_aligner<T>(&self, work: impl FnOnce(&mut align::Aligner) -> Result<T, String>) -> Result<T, String> {
         let mut guard = self.aligner.lock().unwrap();
         if guard.is_none() {
             *guard = Some(align::Aligner::load(&models::path(&self.models, &models::ALIGNER))?);
         }
-        f(guard.as_mut().unwrap())
+        work(guard.as_mut().unwrap())
     }
 
-    fn with_recognizer<T>(&self, f: impl FnOnce(&asr::Recognizer) -> Result<T, String>) -> Result<T, String> {
+    fn with_recognizer<T>(&self, work: impl FnOnce(&asr::Recognizer) -> Result<T, String>) -> Result<T, String> {
         let mut guard = self.recognizer.lock().unwrap();
         if guard.is_none() {
             *guard = Some(asr::Recognizer::load(&models::path(&self.models, &models::WHISPER))?);
         }
-        f(guard.as_ref().unwrap())
+        work(guard.as_ref().unwrap())
     }
 
     /// Load both models ahead of the first take, so it isn't slow.
     fn warm(&self) {
-        if models::ALL.iter().all(|m| models::ready(&self.models, m)) {
+        if models::ALL.iter().all(|model| models::ready(&self.models, model)) {
             let _ = self.with_aligner(|_| Ok(()));
             let _ = self.with_recognizer(|_| Ok(()));
         }
@@ -54,27 +54,27 @@ impl Engine {
     fn check(&self, text_id: &str, part: &str, wav: &[u8]) -> Result<Attempt, String> {
         let dir = self.store.part_dir(text_id, part)?;
         let raw = audio::read_wav(wav)?;
-        let take = audio::clean(raw).filter(|p| p.seconds() >= 0.5).ok_or("Nothing was heard in the recording. Is the microphone on?")?;
+        let take = audio::clean(raw).filter(|cleaned| cleaned.seconds() >= 0.5).ok_or("Nothing was heard in the recording. Is the microphone on?")?;
         let a16 = audio::resample(&take, 16000);
         let txt = store::norm(part);
-        let mut mine = self.with_aligner(|a| a.align(&a16, &txt))?;
-        let heard = self.with_recognizer(|r| r.transcribe(&a16, &mine, 25.0))?;
+        let mut mine = self.with_aligner(|aligner| aligner.align(&a16, &txt))?;
+        let heard = self.with_recognizer(|recognizer| recognizer.transcribe(&a16, &mine, 25.0))?;
         // stopped before the end: the aligner squeezes the whole text into the take and the words that were said
         // score low, so score only the words up to the last one heard; the rest count as missed
         let (wrong, _) = text::heard_words(&txt, &heard);
-        let said = wrong.iter().rposition(|w| w.is_none()).map(|i| i + 1).unwrap_or(0);
-        if said > 0 && said < mine.len() && wrong[said..].iter().all(|w| w.as_deref() == Some("")) {
+        let said = wrong.iter().rposition(|verdict| verdict.is_none()).map(|last_heard| last_heard + 1).unwrap_or(0);
+        if said > 0 && said < mine.len() && wrong[said..].iter().all(|verdict| verdict.as_deref() == Some("")) {
             let first: Vec<&str> = txt.split_whitespace().take(said).collect();
-            let head = self.with_aligner(|a| a.align(&a16, &first.join(" ")))?;
+            let head = self.with_aligner(|aligner| aligner.align(&a16, &first.join(" ")))?;
             mine.splice(..said, head);
-            for m in &mut mine[said..] {
-                *m = text::WordTime { score: Some(0.0), ..Default::default() };
+            for word_time in &mut mine[said..] {
+                *word_time = text::WordTime { score: Some(0.0), ..Default::default() };
             }
         }
         let words = text::judge(&txt, &heard, &mine, None);
-        let good = words.iter().filter(|w| w.status == "good").count();
+        let good = words.iter().filter(|word| word.status == "good").count();
         let spoken = if said > 0 && said < words.len() { said } else { words.len() };
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
         let now = chrono::Local::now();
         let id = now.format("%Y%m%d-%H%M%S").to_string();
         let file = dir.join(format!("{id}.wav"));
@@ -97,16 +97,16 @@ impl Engine {
 }
 
 /// Run blocking engine work off the main thread.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
-    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 fn info(engine: State<'_, Shared>) -> Value {
     json!({
         "data": engine.store.data,
-        "models": models::ALL.iter().map(|m| (m.key, models::ready(&engine.models, m))).collect::<std::collections::BTreeMap<_, _>>(),
-        "sizes": models::ALL.iter().map(|m| (m.key, m.bytes)).collect::<std::collections::BTreeMap<_, _>>(),
+        "models": models::ALL.iter().map(|model| (model.key, models::ready(&engine.models, model))).collect::<std::collections::BTreeMap<_, _>>(),
+        "sizes": models::ALL.iter().map(|model| (model.key, model.bytes)).collect::<std::collections::BTreeMap<_, _>>(),
     })
 }
 
@@ -132,7 +132,7 @@ fn delete_text(engine: State<'_, Shared>, id: String) -> Result<(), String> {
 
 #[tauri::command]
 fn scores(engine: State<'_, Shared>, text: String) -> Result<Value, String> {
-    engine.store.scores(&text).map(|s| json!(s))
+    engine.store.scores(&text).map(|part_scores| json!(part_scores))
 }
 
 #[tauri::command]
@@ -152,23 +152,23 @@ fn activity(engine: State<'_, Shared>) -> Value {
 
 #[tauri::command]
 fn pron(w: String) -> Value {
-    sounds::sounds_like(&w).map(|s| json!(s)).unwrap_or(json!({}))
+    sounds::sounds_like(&w).map(|sounds| json!(sounds)).unwrap_or(json!({}))
 }
 
-fn percent_decode(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(v);
-                i += 3;
+fn percent_decode(encoded: &str) -> String {
+    let bytes = encoded.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&encoded[index + 1..index + 3], 16) {
+                out.push(byte);
+                index += 3;
                 continue;
             }
         }
-        out.push(b[i]);
-        i += 1;
+        out.push(bytes[index]);
+        index += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
 }
@@ -179,7 +179,7 @@ async fn check(engine: State<'_, Shared>, request: tauri::ipc::Request<'_>) -> R
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("expected the recording as raw bytes".into());
     };
-    let header = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).map(percent_decode).unwrap_or_default();
+    let header = |name: &str| request.headers().get(name).and_then(|value| value.to_str().ok()).map(percent_decode).unwrap_or_default();
     let (text_id, part, wav) = (header("x-text"), header("x-part"), bytes.clone());
     let engine = engine.inner().clone();
     blocking(move || engine.check(&text_id, &part, &wav)).await
@@ -237,32 +237,32 @@ mod tests {
         std::fs::create_dir_all(data.join("texts")).unwrap();
         let engine = Engine { store: Store { data: data.clone() }, models, aligner: Mutex::new(None), recognizer: Mutex::new(None) };
         let text = "The northern lights are one of the most beautiful things you can see in the night sky.";
-        let t = engine.store.add(text, Some("Lights".into()), Some("sentences".into())).unwrap();
-        let id = t["id"].as_str().unwrap().to_string();
+        let added = engine.store.add(text, Some("Lights".into()), Some("sentences".into())).unwrap();
+        let id = added["id"].as_str().unwrap().to_string();
         let wav = std::fs::read(std::env::var("PARROT_TAKE").unwrap()).unwrap();
         let started = std::time::Instant::now();
-        let a = engine.check(&id, text, &wav).unwrap();
-        eprintln!("{:.1} s · score {} · {} wpm · heard: {}", started.elapsed().as_secs_f64(), a.score, a.wpm, a.heard);
-        for w in a.words.iter().filter(|w| w.status != "good") {
-            eprintln!("  {} {} heard={:?} score={:?}", w.w, w.status, w.heard, w.score);
+        let attempt = engine.check(&id, text, &wav).unwrap();
+        eprintln!("{:.1} s · score {} · {} wpm · heard: {}", started.elapsed().as_secs_f64(), attempt.score, attempt.wpm, attempt.heard);
+        for word in attempt.words.iter().filter(|word| word.status != "good") {
+            eprintln!("  {} {} heard={:?} score={:?}", word.w, word.status, word.heard, word.score);
         }
         if let Ok(out) = std::env::var("PARROT_E2E_OUT") {
-            std::fs::write(out, serde_json::to_string(&a.words).unwrap()).unwrap();
+            std::fs::write(out, serde_json::to_string(&attempt.words).unwrap()).unwrap();
         }
-        let things = a.words.iter().find(|w| w.w == "things").unwrap();
+        let things = attempt.words.iter().find(|word| word.w == "things").unwrap();
         let letters = things.letters.as_ref().unwrap();
         eprintln!("  things letters: {letters:?}");
         let th = (letters[0].unwrap() + letters[1].unwrap()) / 2.0;
-        let rest = letters[2..].iter().map(|l| l.unwrap()).sum::<f64>() / 4.0;
+        let rest = letters[2..].iter().map(|letter| letter.unwrap()).sum::<f64>() / 4.0;
         assert!(th < rest, "the th of things said as sinks scores lowest: {th} vs {rest}");
-        assert!(data.join(&a.audio).exists(), "the take is saved");
+        assert!(data.join(&attempt.audio).exists(), "the take is saved");
         assert_eq!(engine.store.attempts(&id, text).unwrap().len(), 1);
-        assert_eq!(engine.store.scores(&id).unwrap().values().next().unwrap().last, a.score);
-        assert!(a.words.iter().any(|w| w.w == "things" && w.status == "wrong" && w.heard.as_deref() == Some("sinks")));
+        assert_eq!(engine.store.scores(&id).unwrap().values().next().unwrap().last, attempt.score);
+        assert!(attempt.words.iter().any(|word| word.w == "things" && word.status == "wrong" && word.heard.as_deref() == Some("sinks")));
         let silent = {
-            let p = data.join("silence.wav");
-            audio::write_wav(&p, &audio::Pcm { samples: vec![0.0; 48000], rate: 48000 }).unwrap();
-            std::fs::read(p).unwrap()
+            let silence_path = data.join("silence.wav");
+            audio::write_wav(&silence_path, &audio::Pcm { samples: vec![0.0; 48000], rate: 48000 }).unwrap();
+            std::fs::read(silence_path).unwrap()
         };
         assert!(engine.check(&id, text, &silent).unwrap_err().contains("Nothing was heard"));
         let _ = std::fs::remove_dir_all(data);

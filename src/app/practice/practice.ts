@@ -35,20 +35,20 @@ export class Practice {
   /** the try shown, unless a new one is being recorded */
   protected readonly result = computed(() => (this.recording() ? null : this.store.result()));
   protected readonly counts = computed(() => {
-    const w = this.result()?.words ?? [];
-    return { wrong: w.filter((x) => x.status === 'wrong').length, unclear: w.filter((x) => x.status === 'unclear').length };
+    const words = this.result()?.words ?? [];
+    return { wrong: words.filter((word) => word.status === 'wrong').length, unclear: words.filter((word) => word.status === 'unclear').length };
   });
   protected readonly delta = computed(() => {
-    const r = this.result();
-    const p = this.store.previousScore();
-    return r && p != null ? r.score - p : null;
+    const result = this.result();
+    const previousScore = this.store.previousScore();
+    return result && previousScore != null ? result.score - previousScore : null;
   });
   protected readonly unit = computed(
     () => ({ whole: 'Text', sentences: 'Sentence', short: 'Part' })[this.store.text()?.mode ?? 'sentences'],
   );
   protected readonly size = computed(() => {
-    const n = this.store.words().length;
-    return n > 120 ? 'xl' : n > 45 ? 'long' : '';
+    const wordCount = this.store.words().length;
+    return wordCount > 120 ? 'xl' : wordCount > 45 ? 'long' : '';
   });
 
   constructor() {
@@ -61,9 +61,9 @@ export class Practice {
     });
     // keep the current part in view in the stepper
     effect(() => {
-      const i = this.store.index();
+      const partIndex = this.store.index();
       queueMicrotask(() =>
-        this.stepper()?.nativeElement.children[i]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
+        this.stepper()?.nativeElement.children[partIndex]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
       );
     });
   }
@@ -79,58 +79,58 @@ export class Practice {
     }
   }
 
-  protected status(k: number) {
-    return this.result()?.words[k]?.status ?? '';
+  protected status(wordIndex: number) {
+    return this.result()?.words[wordIndex]?.status ?? '';
   }
 
-  protected heard(k: number) {
-    const w = this.result()?.words[k];
-    return w?.status === 'wrong' ? (w.heard ? `heard “${w.heard}”` : 'not heard') : '';
+  protected heard(wordIndex: number) {
+    const word = this.result()?.words[wordIndex];
+    return word?.status === 'wrong' ? (word.heard ? `heard “${word.heard}”` : 'not heard') : '';
   }
 
-  protected wordClick(k: number) {
-    this.store.selectWord(k);
-    const w = this.result()?.words[k];
-    if (w?.t && w.status !== 'good') this.store.compareWord(k);
-    else this.store.sayWord(k);
+  protected wordClick(wordIndex: number) {
+    this.store.selectWord(wordIndex);
+    const word = this.result()?.words[wordIndex];
+    if (word?.t && word.status !== 'good') this.store.compareWord(wordIndex);
+    else this.store.sayWord(wordIndex);
   }
 
   protected pace(wpm: number) {
     return wpm < 120 ? 'slow · aim 140–165' : wpm < 140 ? 'a little slow · aim 140–165' : wpm > 175 ? 'fast · aim 140–165' : 'a natural pace';
   }
 
-  protected key(e: KeyboardEvent) {
-    const el = e.target as HTMLElement;
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  protected key(event: KeyboardEvent) {
+    const el = event.target as HTMLElement;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || event.metaKey || event.ctrlKey || event.altKey) return;
     if (document.querySelector('dialog[open]')) return;
-    const s = this.store;
-    switch (e.key) {
+    const store = this.store;
+    switch (event.key) {
       case ' ':
-        s.toggleReference();
+        store.toggleReference();
         break;
       case 'r':
       case 'R':
-        s.toggleRecord();
+        store.toggleRecord();
         break;
       case 'm':
       case 'M':
-        s.toggleMine();
+        store.toggleMine();
         break;
       case 'ArrowDown':
       case 'ArrowRight':
-        s.next();
+        store.next();
         break;
       case 'ArrowUp':
       case 'ArrowLeft':
-        s.previous();
+        store.previous();
         break;
       case 'Escape':
-        s.stop();
-        s.selectWord(null);
+        store.stop();
+        store.selectWord(null);
         break;
       default:
         return;
     }
-    e.preventDefault();
+    event.preventDefault();
   }
 }

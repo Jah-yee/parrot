@@ -30,99 +30,99 @@ PORT = 8770
 ID = re.compile(r"[0-9a-f]{10}")
 
 
-def norm(s):
-    return " ".join(s.split())
+def norm(phrase):
+    return " ".join(phrase.split())
 
 
-def sha(s):
-    return hashlib.sha1(norm(s).encode()).hexdigest()[:10]
+def sha(phrase):
+    return hashlib.sha1(norm(phrase).encode()).hexdigest()[:10]
 
 
 def text_dir(tid):
     if not ID.fullmatch(tid or ""):
         raise ValueError("bad text id")
-    d = os.path.join(paths.TEXTS, tid)
-    if not os.path.exists(os.path.join(d, "text.txt")):
+    folder = os.path.join(paths.TEXTS, tid)
+    if not os.path.exists(os.path.join(folder, "text.txt")):
         raise FileNotFoundError(tid)
-    return d
+    return folder
 
 
-def text_info(d):
-    meta = json.load(open(os.path.join(d, "meta.json"))) if os.path.exists(os.path.join(d, "meta.json")) else {}
-    body = open(os.path.join(d, "text.txt")).read()
+def text_info(folder):
+    meta = json.load(open(os.path.join(folder, "meta.json"))) if os.path.exists(os.path.join(folder, "meta.json")) else {}
+    body = open(os.path.join(folder, "text.txt")).read()
     created = meta.get("created") or datetime.datetime.fromtimestamp(
-        os.path.getmtime(os.path.join(d, "text.txt"))).isoformat(timespec="seconds")
-    per_part = scores(os.path.basename(d))
-    last = [v["last"] for v in per_part.values()]
-    return {"id": os.path.basename(d), "title": meta.get("title") or " ".join(body.split()[:6]) + "…", "text": body,
+        os.path.getmtime(os.path.join(folder, "text.txt"))).isoformat(timespec="seconds")
+    per_part = scores(os.path.basename(folder))
+    last = [part_scores["last"] for part_scores in per_part.values()]
+    return {"id": os.path.basename(folder), "title": meta.get("title") or " ".join(body.split()[:6]) + "…", "text": body,
             "words": len(body.split()), "created": created, "mode": meta.get("mode", "sentences"),
             "opened": meta.get("opened"), "practised": len(last), "scores": per_part,
             "average": round(sum(last) / len(last)) if last else None}
 
 
 def texts():
-    out = [text_info(os.path.dirname(t)) for t in glob.glob(os.path.join(paths.TEXTS, "*", "text.txt"))]
-    return sorted(out, key=lambda c: c["opened"] or c["created"], reverse=True)
+    out = [text_info(os.path.dirname(text_path)) for text_path in glob.glob(os.path.join(paths.TEXTS, "*", "text.txt"))]
+    return sorted(out, key=lambda info: info["opened"] or info["created"], reverse=True)
 
 
-def save_meta(d, **kw):
-    path = os.path.join(d, "meta.json")
+def save_meta(folder, **kw):
+    path = os.path.join(folder, "meta.json")
     meta = json.load(open(path)) if os.path.exists(path) else {}
-    meta.update({k: v for k, v in kw.items() if v is not None})
+    meta.update({key: value for key, value in kw.items() if value is not None})
     json.dump(meta, open(path, "w"), indent=1)
 
 
 def part_dir(tid, part):
     """The folder of one part of a text, checked to really be in the text."""
-    d = text_dir(tid)
-    if not part or norm(part) not in norm(open(os.path.join(d, "text.txt")).read()):
+    folder = text_dir(tid)
+    if not part or norm(part) not in norm(open(os.path.join(folder, "text.txt")).read()):
         raise ValueError("that part is not in the text; reload")
-    return os.path.join(d, "p-" + sha(part))
+    return os.path.join(folder, "p-" + sha(part))
 
 
 def scores(tid):
     """{part key: {"last": score, "best": score, "tries": n}} for every recorded part of a text."""
     out = {}
-    for d in glob.glob(os.path.join(text_dir(tid), "p-*", "")):
-        rs = [json.load(open(j)) for j in sorted(glob.glob(os.path.join(d, "*.json")))]
-        if rs:
-            out[os.path.basename(os.path.dirname(d))] = {"last": rs[-1]["score"], "best": max(r["score"] for r in rs),
-                                                         "tries": len(rs)}
+    for part_folder in glob.glob(os.path.join(text_dir(tid), "p-*", "")):
+        results = [json.load(open(result_path)) for result_path in sorted(glob.glob(os.path.join(part_folder, "*.json")))]
+        if results:
+            out[os.path.basename(os.path.dirname(part_folder))] = {
+                "last": results[-1]["score"], "best": max(result["score"] for result in results), "tries": len(results)}
     return out
 
 
 def activity(days=7):
     """Tries per day for the last days (today last), and the average score of those tries."""
     today = datetime.date.today()
-    counts = {today - datetime.timedelta(days=k): 0 for k in range(days)}
-    total, n = 0, 0
-    for js in glob.glob(os.path.join(paths.TEXTS, "*", "p-*", "*.json")):
-        stem = os.path.basename(js)[:8]
+    counts = {today - datetime.timedelta(days=days_ago): 0 for days_ago in range(days)}
+    total, tries = 0, 0
+    for result_path in glob.glob(os.path.join(paths.TEXTS, "*", "p-*", "*.json")):
+        stem = os.path.basename(result_path)[:8]
         try:
             day = datetime.date(int(stem[:4]), int(stem[4:6]), int(stem[6:8]))
         except ValueError:
             continue
         if day in counts:
             counts[day] += 1
-            total += json.load(open(js))["score"]
-            n += 1
-    return {"days": [{"date": d.isoformat(), "tries": counts[d]} for d in sorted(counts)],
-            "tries": n, "average": round(total / n) if n else None}
+            total += json.load(open(result_path))["score"]
+            tries += 1
+    return {"days": [{"date": day.isoformat(), "tries": counts[day]} for day in sorted(counts)],
+            "tries": tries, "average": round(total / tries) if tries else None}
 
 
 def attempts(folder):
     out = []
-    for js in sorted(glob.glob(os.path.join(folder, "*.json")), reverse=True):
-        r = json.load(open(js))
-        out.append({k: r[k] for k in ("id", "when", "score", "wpm", "duration")})
+    for result_path in sorted(glob.glob(os.path.join(folder, "*.json")), reverse=True):
+        result = json.load(open(result_path))
+        out.append({key: result[key] for key in ("id", "when", "score", "wpm", "duration")})
     return out
 
 
 def media(rel):
     """A recording under the data folder, or None."""
-    p = os.path.realpath(os.path.join(paths.DATA, urllib.parse.unquote(rel)))
-    ok = p.endswith(".mp3") and p.startswith(os.path.realpath(paths.TEXTS) + os.sep) and os.path.exists(p)
-    return p if ok else None
+    path = os.path.realpath(os.path.join(paths.DATA, urllib.parse.unquote(rel)))
+    ok = path.endswith(".mp3") and path.startswith(os.path.realpath(paths.TEXTS) + os.sep) and os.path.exists(path)
+    return path if ok else None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -139,8 +139,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         # the app's webview (tauri://localhost, or the Angular dev server) is another origin
         self.send_header("Access-Control-Allow-Origin", "*")
-        for k, v in (extra or {}).items():
-            self.send_header(k, v)
+        for header, value in (extra or {}).items():
+            self.send_header(header, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -154,100 +154,104 @@ class Handler(BaseHTTPRequestHandler):
     def file(self, path):
         """With Range, so the player can seek."""
         data = open(path, "rb").read()
-        m = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
-        if m:
-            a = int(m.group(1) or 0)
-            b = int(m.group(2)) if m.group(2) else len(data) - 1
-            return self.send(206, data[a:b + 1], "audio/mpeg",
-                             {"Content-Range": f"bytes {a}-{b}/{len(data)}", "Accept-Ranges": "bytes"})
+        byte_range = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+        if byte_range:
+            first = int(byte_range.group(1) or 0)
+            last = int(byte_range.group(2)) if byte_range.group(2) else len(data) - 1
+            return self.send(206, data[first:last + 1], "audio/mpeg",
+                             {"Content-Range": f"bytes {first}-{last}/{len(data)}", "Accept-Ranges": "bytes"})
         self.send(200, data, "audio/mpeg", {"Accept-Ranges": "bytes"})
 
     def route(self, method):
-        u = urllib.parse.urlparse(self.path)
-        q = dict(urllib.parse.parse_qsl(u.query))
-        p = u.path
+        url = urllib.parse.urlparse(self.path)
+        query = dict(urllib.parse.parse_qsl(url.query))
+        path = url.path
         if method == "GET":
-            if p == "/api/health":
+            if path == "/api/health":
                 return {"ok": True, "data": paths.DATA, "whisper": os.path.exists(speech.WHISPER_MODEL)}
-            if p == "/api/texts":
+            if path == "/api/texts":
                 return texts()
-            if p == "/api/scores":
-                return scores(q["text"])
-            if p == "/api/attempts":
-                return attempts(part_dir(q["text"], q["part"]))
-            if p == "/api/attempt":
-                return json.load(open(os.path.join(part_dir(q["text"], q["part"]), os.path.basename(q["id"]) + ".json")))
-            if p == "/api/activity":
+            if path == "/api/scores":
+                return scores(query["text"])
+            if path == "/api/attempts":
+                return attempts(part_dir(query["text"], query["part"]))
+            if path == "/api/attempt":
+                return json.load(open(os.path.join(part_dir(query["text"], query["part"]),
+                                                   os.path.basename(query["id"]) + ".json")))
+            if path == "/api/activity":
                 return activity()
-            if p == "/api/peaks":
+            if path == "/api/peaks":
                 # the loudness of a recording in n slices, 0-1, for the waveform
-                f = media(q["f"].removeprefix("/files/"))
-                if not f:
+                recording = media(query["f"].removeprefix("/files/"))
+                if not recording:
                     return self.send(404, {"error": "not found"})
-                return speech.peaks(f, int(q.get("n", 92)))
-            if p == "/api/pron":
-                return sounds.sounds_like(q["w"]) or {}
-            if p.startswith("/files/"):
-                f = media(p[7:])
-                return self.file(f) if f else self.send(404, {"error": "not found"})
-            if p == "/clip":
+                return speech.peaks(recording, int(query.get("n", 92)))
+            if path == "/api/pron":
+                return sounds.sounds_like(query["w"]) or {}
+            if path.startswith("/files/"):
+                recording = media(path[7:])
+                return self.file(recording) if recording else self.send(404, {"error": "not found"})
+            if path == "/clip":
                 # one word cut exactly (a playing file can't be stopped on time from the page), slowed with atempo
-                f = media(q["f"].removeprefix("/files/"))
-                if not f:
+                recording = media(query["f"].removeprefix("/files/"))
+                if not recording:
                     return self.send(404, {"error": "not found"})
-                a, b, rate = float(q["a"]), float(q["b"]), max(0.5, min(1.0, float(q.get("rate", 1))))
-                fade = min(0.015, (b - a) / 4)
-                wav = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", f,
+                start, end = float(query["a"]), float(query["b"])
+                rate = max(0.5, min(1.0, float(query.get("rate", 1))))
+                fade = min(0.015, (end - start) / 4)
+                wav = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}",
+                                      "-i", recording,
                                       "-af", f"afade=t=in:d={fade:.3f},areverse,afade=t=in:d={fade:.3f},areverse,"
                                       f"atempo={rate},apad=pad_dur=0.05", "-ac", "1", "-f", "wav", "-"],
                                      capture_output=True).stdout
                 return self.send(200, wav, "audio/wav")
         else:
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            if p == "/api/texts":
-                d = json.loads(body)
-                body_text = norm(d["text"])
+            if path == "/api/texts":
+                payload = json.loads(body)
+                body_text = norm(payload["text"])
                 if not body_text:
                     raise ValueError("the text is empty")
-                td = os.path.join(paths.TEXTS, sha(body_text))
-                os.makedirs(td, exist_ok=True)
-                open(os.path.join(td, "text.txt"), "w").write(body_text)
-                created = None if os.path.exists(os.path.join(td, "meta.json")) else \
+                folder = os.path.join(paths.TEXTS, sha(body_text))
+                os.makedirs(folder, exist_ok=True)
+                open(os.path.join(folder, "text.txt"), "w").write(body_text)
+                created = None if os.path.exists(os.path.join(folder, "meta.json")) else \
                     datetime.datetime.now().isoformat(timespec="seconds")
-                save_meta(td, title=(d.get("title") or "").strip() or None, mode=d.get("mode"), created=created)
-                return text_info(td)
-            if p == "/api/texts/update":
-                d = json.loads(body)
-                td = text_dir(d["id"])
-                save_meta(td, title=(d.get("title") or "").strip() or None, mode=d.get("mode"),
-                          opened=datetime.datetime.now().isoformat(timespec="seconds") if d.get("opened") else None)
-                return text_info(td)
-            if p == "/api/texts/delete":
+                save_meta(folder, title=(payload.get("title") or "").strip() or None, mode=payload.get("mode"),
+                          created=created)
+                return text_info(folder)
+            if path == "/api/texts/update":
+                payload = json.loads(body)
+                folder = text_dir(payload["id"])
+                save_meta(folder, title=(payload.get("title") or "").strip() or None, mode=payload.get("mode"),
+                          opened=datetime.datetime.now().isoformat(timespec="seconds") if payload.get("opened") else None)
+                return text_info(folder)
+            if path == "/api/texts/delete":
                 # moved to the trash folder, not deleted
-                td = text_dir(json.loads(body)["id"])
+                folder = text_dir(json.loads(body)["id"])
                 os.makedirs(paths.TRASH, exist_ok=True)
-                os.rename(td, os.path.join(paths.TRASH, os.path.basename(td) + "-" +
-                                           datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+                os.rename(folder, os.path.join(paths.TRASH, os.path.basename(folder) + "-" +
+                                               datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
                 return {"ok": True}
-            if p == "/api/check":
-                folder = part_dir(q["text"], q["part"])
+            if path == "/api/check":
+                folder = part_dir(query["text"], query["part"])
                 ext = "mp4" if "mp4" in self.headers.get("Content-Type", "") else "webm"
-                return speech.check(folder, norm(q["part"]), body, ext)
+                return speech.check(folder, norm(query["part"]), body, ext)
         return self.send(404, {"error": "not found"})
 
     def handle_method(self, method):
         try:
-            r = self.route(method)
-            if r is not None:
-                self.send(200, r)
-        except (KeyError, FileNotFoundError) as e:
-            self.send(404, {"error": f"not found: {e}"})
-        except ValueError as e:
-            self.send(400, {"error": str(e)})
-        except subprocess.CalledProcessError as e:
-            self.send(500, {"error": f"could not read the recording ({e})"})
-        except Exception as e:      # a message in the app, not a dropped connection
-            self.send(500, {"error": f"{type(e).__name__}: {e}"})
+            response = self.route(method)
+            if response is not None:
+                self.send(200, response)
+        except (KeyError, FileNotFoundError) as error:
+            self.send(404, {"error": f"not found: {error}"})
+        except ValueError as error:
+            self.send(400, {"error": str(error)})
+        except subprocess.CalledProcessError as error:
+            self.send(500, {"error": f"could not read the recording ({error})"})
+        except Exception as error:      # a message in the app, not a dropped connection
+            self.send(500, {"error": f"{type(error).__name__}: {error}"})
 
     def do_GET(self):
         self.handle_method("GET")

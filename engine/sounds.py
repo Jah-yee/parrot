@@ -18,7 +18,7 @@ VOWELS = {"AA": ("aa", "ɑ"), "AE": ("a", "æ"), "AH": ("uh", "ʌ"), "AO": ("aw"
 CONS = {"B": "b", "CH": ("ch", "tʃ"), "D": "d", "DH": ("dh", "ð"), "F": "f", "G": ("g", "ɡ"), "HH": "h", "JH": ("j", "dʒ"),
         "K": "k", "L": "l", "M": "m", "N": "n", "NG": ("ng", "ŋ"), "P": "p", "R": ("r", "ɹ"), "S": "s", "SH": ("sh", "ʃ"),
         "T": "t", "TH": ("th", "θ"), "V": "v", "W": "w", "Y": ("y", "j"), "Z": "z", "ZH": ("zh", "ʒ")}
-ONSETS = {tuple(o.split()) for o in (
+ONSETS = {tuple(onset.split()) for onset in (
     "P R|P L|B R|B L|T R|D R|K R|K L|G R|G L|F R|F L|TH R|SH R|S P|S T|S K|S M|S N|S L|S W|T W|D W|K W|G W|TH W|"
     "S P R|S T R|S K R|S P L|S K W|P Y|B Y|K Y|F Y|M Y|V Y|HH Y|G Y|S K Y|S P Y").split("|")}
 
@@ -31,8 +31,8 @@ def cmu():
             os.makedirs(os.path.dirname(CMUDICT), exist_ok=True)
             subprocess.run(["curl", "-sSfL", "-o", CMUDICT, CMUDICT_URL], check=True)
         _cmu = {}
-        for ln in open(CMUDICT, encoding="utf-8", errors="ignore"):
-            parts = ln.split("#")[0].split()
+        for line in open(CMUDICT, encoding="utf-8", errors="ignore"):
+            parts = line.split("#")[0].split()
             if parts and "(" not in parts[0]:
                 _cmu[parts[0]] = parts[1:]
     return _cmu
@@ -41,53 +41,54 @@ def cmu():
 def syllables(phones):
     """[(onset+nucleus+coda phones, stress)]: every vowel a syllable, consonants between two vowels given to the
     second as the longest legal English onset ("six-teen" S IH K | S T IY N)."""
-    vi = [k for k, p in enumerate(phones) if p[-1].isdigit()]
-    if not vi:
+    vowels = [index for index, phone in enumerate(phones) if phone[-1].isdigit()]
+    if not vowels:
         return [(phones, None)]
     cuts = [0]
-    for a, b in zip(vi, vi[1:]):
-        mid = phones[a + 1:b]
-        n = 0
-        for m in range(len(mid), 0, -1):
-            if m == 1 and mid[-1] != "NG" or tuple(mid[-m:]) in ONSETS:
-                n = m
+    for vowel, next_vowel in zip(vowels, vowels[1:]):
+        mid = phones[vowel + 1:next_vowel]
+        onset_length = 0
+        for length in range(len(mid), 0, -1):
+            if length == 1 and mid[-1] != "NG" or tuple(mid[-length:]) in ONSETS:
+                onset_length = length
                 break
-        cuts.append(b - n)
+        cuts.append(next_vowel - onset_length)
     cuts.append(len(phones))
-    return [(phones[c:d], int(phones[v][-1])) for c, d, v in zip(cuts, cuts[1:], vi)]
+    return [(phones[start:end], int(phones[vowel][-1])) for start, end, vowel in zip(cuts, cuts[1:], vowels)]
 
 
 def sounds_like(word):
     """{"spell": [[syllable, stressed?], ...], "ipa": "/ˈæn.sɚ/"} or None for a word not in the dictionary."""
-    d = cmu()
-    parts = [p for p in re.split(r"[-–—/]", word.lower().replace("’", "'")) if p]
+    dictionary = cmu()
+    parts = [piece for piece in re.split(r"[-–—/]", word.lower().replace("’", "'")) if piece]
     spell, ipas = [], []
     for part in parts:
         ipa = []
-        w = re.sub(r"[^a-z']", "", part).strip("'")
-        ph = d.get(w)
-        if ph is None:
+        bare = re.sub(r"[^a-z']", "", part).strip("'")
+        phones = dictionary.get(bare)
+        if phones is None:
             return None
-        for syl, stress in syllables(ph):
-            s, i = "", ""
-            for k, p in enumerate(syl):
-                base, digit = (p[:-1], p[-1]) if p[-1].isdigit() else (p, None)
+        for syl, stress in syllables(phones):
+            syl_spell, syl_ipa = "", ""
+            for index, phone in enumerate(syl):
+                base, digit = (phone[:-1], phone[-1]) if phone[-1].isdigit() else (phone, None)
                 if digit is None:
-                    c = CONS[base]
-                    s, i = s + (c if isinstance(c, str) else c[0]), i + (c if isinstance(c, str) else c[1])
+                    consonant = CONS[base]
+                    syl_spell = syl_spell + (consonant if isinstance(consonant, str) else consonant[0])
+                    syl_ipa = syl_ipa + (consonant if isinstance(consonant, str) else consonant[1])
                     continue
-                r, v = VOWELS[base]
-                rest = syl[k + 1:]
+                vowel_spell, vowel_ipa = VOWELS[base]
+                rest = syl[index + 1:]
                 if digit == "0":
                     if base == "ER":
-                        r, v = "r", "ɚ"
+                        vowel_spell, vowel_ipa = "r", "ɚ"
                     elif base == "AH":
                         # a weak "uh" before a final n or l after a consonant is the syllabic n/l ("shn", "tl")
-                        r, v = ("", "ə") if rest in (["N"], ["L"]) and k > 0 else ("uh", "ə")
+                        vowel_spell, vowel_ipa = ("", "ə") if rest in (["N"], ["L"]) and index > 0 else ("uh", "ə")
                     elif base == "IH":
-                        v = "ɪ"
-                s, i = s + r, i + v
-            spell.append([s, stress == 1])
-            ipa.append(("ˈ" if stress == 1 else "ˌ" if stress == 2 else "") + i)
+                        vowel_ipa = "ɪ"
+                syl_spell, syl_ipa = syl_spell + vowel_spell, syl_ipa + vowel_ipa
+            spell.append([syl_spell, stress == 1])
+            ipa.append(("ˈ" if stress == 1 else "ˌ" if stress == 2 else "") + syl_ipa)
         ipas.append(".".join(ipa).replace(".ˈ", "ˈ").replace(".ˌ", "ˌ"))
     return {"spell": spell, "ipa": "/" + " ".join(ipas) + "/"}

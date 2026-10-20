@@ -53,15 +53,16 @@ export class Recorder {
     URL.revokeObjectURL(url);
     const source = ctx.createMediaStreamSource(this.stream);
     const node = new AudioWorkletNode(ctx, 'parrot-capture', { numberOfInputs: 1, numberOfOutputs: 0 });
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => {
+    node.port.onmessage = (event: MessageEvent<Float32Array>) => {
       if (this.capturing) {
-        this.blocks.push(e.data);
+        this.blocks.push(event.data);
         this.flowing?.();
         this.flowing = null;
       } else {
-        this.preroll.push(e.data);
-        let n = this.preroll.reduce((t, b) => t + b.length, 0);
-        while (n - this.preroll[0].length > ctx.sampleRate / 2) n -= this.preroll.shift()!.length;
+        this.preroll.push(event.data);
+        let buffered = this.preroll.reduce((sum, block) => sum + block.length, 0);
+        while (buffered - this.preroll[0].length > ctx.sampleRate / 2)
+          buffered -= this.preroll.shift()!.length;
       }
     };
     source.connect(node);
@@ -76,7 +77,7 @@ export class Recorder {
   /** Let the microphone go (the system's microphone light turns off). */
   private close() {
     this.node?.disconnect();
-    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream?.getTracks().forEach((track) => track.stop());
     this.ctx?.close();
     this.ctx = this.node = this.analyser = this.stream = null;
     this.preroll = [];
@@ -88,17 +89,17 @@ export class Recorder {
     this.capturing = true;
     try {
       await this.open();
-    } catch (e) {
+    } catch (error) {
       this.capturing = false;
-      throw e;
+      throw error;
     }
     const ctx = this.ctx!;
     if (ctx.state !== 'running') await ctx.resume();
     // the take begins with the half second before the click, and shows as recording once sound arrives
     this.blocks = [...this.preroll];
     this.preroll = [];
-    const arrived = new Promise<void>((r) => (this.flowing = r));
-    await Promise.race([arrived, new Promise((r) => setTimeout(r, 3000))]);
+    const arrived = new Promise<void>((resolve) => (this.flowing = resolve));
+    await Promise.race([arrived, new Promise((resolve) => setTimeout(resolve, 3000))]);
 
     const analyser = this.analyser!;
     const buf = new Uint8Array(analyser.fftSize);
@@ -111,12 +112,12 @@ export class Recorder {
       this.elapsed.set((performance.now() - t0) / 1000);
       analyser.getByteTimeDomainData(buf);
       let peak = 0;
-      for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+      for (const sample of buf) peak = Math.max(peak, Math.abs(sample - 128));
       const level = Math.min(1, peak / 100);
       this.level.set(level);
       peak100 = Math.max(peak100, level);
       if (performance.now() - last >= 100) {
-        this.trace.update((t) => [...t, peak100]);
+        this.trace.update((trace) => [...trace, peak100]);
         peak100 = 0;
         last = performance.now();
       }
@@ -128,18 +129,20 @@ export class Recorder {
     if (!this.ctx || !this.capturing) return new Blob();
     clearInterval(this.timer);
     // let the last block arrive from the audio thread
-    await new Promise((r) => setTimeout(r, 60));
+    await new Promise((resolve) => setTimeout(resolve, 60));
     this.capturing = false;
     const rate = this.ctx.sampleRate;
     this.recording.set(false);
     this.level.set(0);
     this.idle = window.setTimeout(() => this.close(), 120_000);
-    const total = this.blocks.reduce((n, b) => n + b.length, 0);
+    const total = this.blocks.reduce((sum, block) => sum + block.length, 0);
     const pcm = new Int16Array(total);
     let at = 0;
-    for (const b of this.blocks) {
-      for (let i = 0; i < b.length; i++) pcm[at + i] = Math.max(-1, Math.min(1, b[i])) * 32767;
-      at += b.length;
+    for (const block of this.blocks) {
+      for (let sampleIndex = 0; sampleIndex < block.length; sampleIndex++) {
+        pcm[at + sampleIndex] = Math.max(-1, Math.min(1, block[sampleIndex])) * 32767;
+      }
+      at += block.length;
     }
     this.blocks = [];
     return wav(pcm, rate);

@@ -11,10 +11,10 @@ use std::sync::LazyLock;
 
 static UNITS: LazyLock<HashMap<&str, i64>> = LazyLock::new(|| {
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen"
-        .split(' ').enumerate().map(|(i, w)| (w, i as i64)).collect()
+        .split(' ').enumerate().map(|(value, word)| (word, value as i64)).collect()
 });
 static TENS: LazyLock<HashMap<&str, i64>> = LazyLock::new(|| {
-    "twenty thirty forty fifty sixty seventy eighty ninety".split(' ').enumerate().map(|(i, w)| (w, 10 * (i as i64 + 2))).collect()
+    "twenty thirty forty fifty sixty seventy eighty ninety".split(' ').enumerate().map(|(index, word)| (word, 10 * (index as i64 + 2))).collect()
 });
 // "second" is left out on purpose: it is far more often the time unit ("twenty seconds") than the ordinal
 static ORDINALS: LazyLock<HashMap<&str, i64>> = LazyLock::new(|| {
@@ -47,12 +47,12 @@ static CLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{1,2}\.[0-5]\d$
 static RAW: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d+(?:[.,]\d+)*(?:st|nd|rd|th)?|[a-z][a-z'.]*").unwrap());
 static SUFFIX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(st|nd|rd|th)$").unwrap());
 
-fn is_digits(t: &str) -> bool {
-    DIGITS.is_match(t)
+fn is_digits(token: &str) -> bool {
+    DIGITS.is_match(token)
 }
 
-fn numeric(t: &str) -> bool {
-    UNITS.contains_key(t) || TENS.contains_key(t) || ORDINALS.contains_key(t) || SCALES.contains_key(t) || is_digits(t)
+fn numeric(token: &str) -> bool {
+    UNITS.contains_key(token) || TENS.contains_key(token) || ORDINALS.contains_key(token) || SCALES.contains_key(token) || is_digits(token)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -73,8 +73,8 @@ fn compose(run: &[String]) -> String {
     let mut frac: Option<String> = None;
     let mut prev: Option<Kind> = None;
     let fold = |cur: &mut f64, frac: &mut Option<String>| {
-        if let Some(f) = frac.as_ref().filter(|f| !f.is_empty()) {
-            *cur = format!("{}.{}", *cur as i64, f).parse().unwrap_or(*cur);
+        if let Some(digits) = frac.as_ref().filter(|digits| !digits.is_empty()) {
+            *cur = format!("{}.{}", *cur as i64, digits).parse().unwrap_or(*cur);
         }
         *frac = None;
     };
@@ -91,111 +91,111 @@ fn compose(run: &[String]) -> String {
             frac = Some(String::new());
             continue;
         }
-        let (v, kind);
+        let (value, kind);
         if is_digits(tok) {
-            let mut s = SUFFIX.replace(tok, "").replace(',', "");
-            if CLOCK.is_match(&s) {
-                s = s.replace('.', ""); // whisper writes "three-thirty" as "3.30": a clock time, not 3.3
+            let mut number = SUFFIX.replace(tok, "").replace(',', "");
+            if CLOCK.is_match(&number) {
+                number = number.replace('.', ""); // whisper writes "three-thirty" as "3.30": a clock time, not 3.3
             }
-            v = s.parse::<f64>().unwrap_or(0.0);
+            value = number.parse::<f64>().unwrap_or(0.0);
             kind = Kind::Digits;
-        } else if let Some(&m) = SCALES.get(tok) {
+        } else if let Some(&scale) = SCALES.get(tok) {
             fold(&mut cur, &mut frac);
-            if m == 100 {
+            if scale == 100 {
                 cur = if cur == 0.0 { 1.0 } else { cur } * 100.0;
             } else {
-                total += if cur == 0.0 { 1.0 } else { cur } * m as f64;
+                total += if cur == 0.0 { 1.0 } else { cur } * scale as f64;
                 cur = 0.0;
             }
             prev = Some(Kind::Scale);
             continue;
         } else {
-            v = *UNITS.get(tok).or(TENS.get(tok)).or(ORDINALS.get(tok)).unwrap_or(&0) as f64;
+            value = *UNITS.get(tok).or(TENS.get(tok)).or(ORDINALS.get(tok)).unwrap_or(&0) as f64;
             kind = if TENS.contains_key(tok) { Kind::Tens } else { Kind::Unit };
         }
-        if let Some(f) = frac.as_mut() {
-            f.push_str(&(v as i64).to_string());
+        if let Some(fraction_digits) = frac.as_mut() {
+            fraction_digits.push_str(&(value as i64).to_string());
             continue;
         }
         // a new group when a number follows one it cannot combine with (19 | 86, 20 | 24, 3 | 30)
         if matches!(prev, Some(Kind::Unit | Kind::Tens | Kind::Digits))
-            && !(prev == Some(Kind::Tens) && kind == Kind::Unit && v < 10.0)
+            && !(prev == Some(Kind::Tens) && kind == Kind::Unit && value < 10.0)
         {
             groups.push(total + cur);
             total = 0.0;
             cur = 0.0;
         }
-        cur += v;
+        cur += value;
         prev = Some(kind);
     }
     fold(&mut cur, &mut frac);
     groups.push(total + cur);
     if groups.len() == 1 {
-        let v = groups[0];
-        return if v.fract() != 0.0 {
-            format!("{v:.6}").trim_end_matches('0').trim_end_matches('.').to_string()
+        let value = groups[0];
+        return if value.fract() != 0.0 {
+            format!("{value:.6}").trim_end_matches('0').trim_end_matches('.').to_string()
         } else {
-            format!("{}", v as i64)
+            format!("{}", value as i64)
         };
     }
     let mut out = format!("{}", groups[0] as i64);
-    for g in &groups[1..] {
-        out += &format!("{:02}", *g as i64);
+    for group in &groups[1..] {
+        out += &format!("{:02}", *group as i64);
     }
     out
 }
 
 /// Lower-case word tokens; runs of number words or digits become one "#digits" token.
-pub fn toks(s: &str) -> Vec<String> {
-    let s = s.to_lowercase().replace('\u{2019}', "'").replace('-', " ").replace(':', " ");
+pub fn toks(text: &str) -> Vec<String> {
+    let lowered = text.to_lowercase().replace('\u{2019}', "'").replace('-', " ").replace(':', " ");
     let mut words: Vec<String> = vec![];
-    for m in RAW.find_iter(&s) {
-        let mut w = m.as_str().trim_matches(|c| c == '\'' || c == '.').to_string();
-        if w.ends_with("'s") && !numeric(&w[..w.len() - 2]) {
-            w.truncate(w.len() - 2);
+    for found in RAW.find_iter(&lowered) {
+        let mut word = found.as_str().trim_matches(|character| character == '\'' || character == '.').to_string();
+        if word.ends_with("'s") && !numeric(&word[..word.len() - 2]) {
+            word.truncate(word.len() - 2);
         }
-        if let Some(r) = SAME.get(w.as_str()) {
-            w = r.to_string();
+        if let Some(spelling) = SAME.get(word.as_str()) {
+            word = spelling.to_string();
         }
-        if !w.is_empty() && !numeric(&w) && w.ends_with('s') {
+        if !word.is_empty() && !numeric(&word) && word.ends_with('s') {
             // "eighteens" / whisper "18s", "nineties" / "90s", "hundreds"
-            let mut stem = w[..w.len() - 1].to_string();
+            let mut stem = word[..word.len() - 1].to_string();
             if stem.ends_with("ie") && TENS.contains_key(format!("{}y", &stem[..stem.len() - 2]).as_str()) {
                 stem = format!("{}y", &stem[..stem.len() - 2]);
             }
-            let s = stem.as_str();
-            if UNITS.contains_key(s) || TENS.contains_key(s) || SCALES.contains_key(s) || is_digits(s) {
+            let stem_text = stem.as_str();
+            if UNITS.contains_key(stem_text) || TENS.contains_key(stem_text) || SCALES.contains_key(stem_text) || is_digits(stem_text) {
                 words.push(stem);
                 words.push("s".into());
                 continue;
             }
         }
-        if !w.is_empty() {
-            words.push(w);
+        if !word.is_empty() {
+            words.push(word);
         }
     }
     let mut out = vec![];
-    let mut i = 0;
-    while i < words.len() {
-        let w = &words[i];
-        let nxt = words.get(i + 1).map(String::as_str).unwrap_or("");
-        let starts = numeric(w) || (w == "a" && SCALES.contains_key(nxt));
+    let mut word_index = 0;
+    while word_index < words.len() {
+        let word = &words[word_index];
+        let nxt = words.get(word_index + 1).map(String::as_str).unwrap_or("");
+        let starts = numeric(word) || (word == "a" && SCALES.contains_key(nxt));
         if !starts {
-            out.push(w.clone());
-            i += 1;
+            out.push(word.clone());
+            word_index += 1;
             continue;
         }
         let mut run: Vec<String> = vec![];
-        while i < words.len() {
-            let w = words[i].as_str();
-            let nxt = words.get(i + 1).map(String::as_str).unwrap_or("");
-            if numeric(w)
-                || (w == "a" && SCALES.contains_key(nxt) && run.is_empty())
-                || (w == "and" && !run.is_empty() && numeric(nxt))
-                || (w == "point" && !run.is_empty() && (UNITS.contains_key(nxt) || is_digits(nxt)))
+        while word_index < words.len() {
+            let word = words[word_index].as_str();
+            let nxt = words.get(word_index + 1).map(String::as_str).unwrap_or("");
+            if numeric(word)
+                || (word == "a" && SCALES.contains_key(nxt) && run.is_empty())
+                || (word == "and" && !run.is_empty() && numeric(nxt))
+                || (word == "point" && !run.is_empty() && (UNITS.contains_key(nxt) || is_digits(nxt)))
             {
-                run.push(w.to_string());
-                i += 1;
+                run.push(word.to_string());
+                word_index += 1;
             } else {
                 break;
             }
@@ -213,8 +213,8 @@ pub enum Op {
 }
 
 /// Stretches where the two token lists really differ (joined spellings like "light day" / "lightday" are not).
-pub fn diff_ops(a: &[String], b: &[String]) -> Vec<(Op, usize, usize, usize, usize)> {
-    capture_diff_slices(Algorithm::Myers, a, b)
+pub fn diff_ops(old: &[String], new: &[String]) -> Vec<(Op, usize, usize, usize, usize)> {
+    capture_diff_slices(Algorithm::Myers, old, new)
         .into_iter()
         .filter_map(|op| match op {
             DiffOp::Equal { .. } => None,
@@ -224,46 +224,46 @@ pub fn diff_ops(a: &[String], b: &[String]) -> Vec<(Op, usize, usize, usize, usi
                 Some((Op::Replace, old_index, old_index + old_len, new_index, new_index + new_len))
             }
         })
-        .filter(|(_, i1, i2, j1, j2)| a[*i1..*i2].concat() != b[*j1..*j2].concat())
+        .filter(|(_, i1, i2, j1, j2)| old[*i1..*i2].concat() != new[*j1..*j2].concat())
         .collect()
 }
 
 /// How alike two words are, 0-1 (difflib's ratio: twice the matching characters over the total).
-fn ratio(x: &str, y: &str) -> f64 {
-    let (a, b): (Vec<char>, Vec<char>) = (x.chars().collect(), y.chars().collect());
-    if a.is_empty() && b.is_empty() {
+fn ratio(first: &str, second: &str) -> f64 {
+    let (first_chars, second_chars): (Vec<char>, Vec<char>) = (first.chars().collect(), second.chars().collect());
+    if first_chars.is_empty() && second_chars.is_empty() {
         return 1.0;
     }
-    let matched: usize = capture_diff_slices(Algorithm::Myers, &a, &b)
+    let matched: usize = capture_diff_slices(Algorithm::Myers, &first_chars, &second_chars)
         .iter()
         .map(|op| if let DiffOp::Equal { len, .. } = op { *len } else { 0 })
         .sum();
-    2.0 * matched as f64 / (a.len() + b.len()) as f64
+    2.0 * matched as f64 / (first_chars.len() + second_chars.len()) as f64
 }
 
 /// {index in xs: index in ys}: an in-order pairing that maximises how alike the paired words are
 /// (pairs below floor are not made).
 pub fn pair_up(xs: &[String], ys: &[String], floor: f64) -> HashMap<usize, usize> {
-    let (n, m) = (xs.len(), ys.len());
-    let sim: Vec<Vec<f64>> = xs.iter().map(|x| ys.iter().map(|y| ratio(x, y)).collect()).collect();
-    let mut best = vec![vec![0f64; m + 1]; n + 1];
-    for i in (0..n).rev() {
-        for j in (0..m).rev() {
-            let take = if sim[i][j] >= floor { sim[i][j] + best[i + 1][j + 1] } else { -1.0 };
-            best[i][j] = take.max(best[i + 1][j]).max(best[i][j + 1]);
+    let (xs_len, ys_len) = (xs.len(), ys.len());
+    let sim: Vec<Vec<f64>> = xs.iter().map(|x_word| ys.iter().map(|y_word| ratio(x_word, y_word)).collect()).collect();
+    let mut best = vec![vec![0f64; ys_len + 1]; xs_len + 1];
+    for x_index in (0..xs_len).rev() {
+        for y_index in (0..ys_len).rev() {
+            let take = if sim[x_index][y_index] >= floor { sim[x_index][y_index] + best[x_index + 1][y_index + 1] } else { -1.0 };
+            best[x_index][y_index] = take.max(best[x_index + 1][y_index]).max(best[x_index][y_index + 1]);
         }
     }
     let mut out = HashMap::new();
-    let (mut i, mut j) = (0, 0);
-    while i < n && j < m {
-        if sim[i][j] >= floor && (best[i][j] - (sim[i][j] + best[i + 1][j + 1])).abs() < 1e-12 {
-            out.insert(i, j);
-            i += 1;
-            j += 1;
-        } else if (best[i][j] - best[i + 1][j]).abs() < 1e-12 {
-            i += 1;
+    let (mut x_index, mut y_index) = (0, 0);
+    while x_index < xs_len && y_index < ys_len {
+        if sim[x_index][y_index] >= floor && (best[x_index][y_index] - (sim[x_index][y_index] + best[x_index + 1][y_index + 1])).abs() < 1e-12 {
+            out.insert(x_index, y_index);
+            x_index += 1;
+            y_index += 1;
+        } else if (best[x_index][y_index] - best[x_index + 1][y_index]).abs() < 1e-12 {
+            x_index += 1;
         } else {
-            j += 1;
+            y_index += 1;
         }
     }
     out
@@ -275,72 +275,72 @@ pub fn heard_words(text: &str, heard: &str) -> (Vec<Option<String>>, Vec<String>
     let sw: Vec<&str> = text.split_whitespace().collect();
     // which word owns each token: numbers spelled over several words become one token ("nineteen fifty-nine")
     let mut owner: Vec<usize> = vec![];
-    let mut n = 0;
-    for k in 0..sw.len() {
-        let m = toks(&sw[..=k].join(" ")).len();
-        for _ in n..m.max(n) {
-            owner.push(k);
+    let mut token_count = 0;
+    for word_index in 0..sw.len() {
+        let tokens_so_far = toks(&sw[..=word_index].join(" ")).len();
+        for _ in token_count..tokens_so_far.max(token_count) {
+            owner.push(word_index);
         }
-        n = n.max(m);
+        token_count = token_count.max(tokens_so_far);
     }
-    let (a, b) = (toks(text), toks(heard));
+    let (text_tokens, heard_tokens) = (toks(text), toks(heard));
     let mut wrong: Vec<Option<String>> = vec![None; sw.len()];
     let mut extra: Vec<String> = vec![String::new(); sw.len()];
-    let clean = |t: &str| t.replace('#', "");
-    let push = |s: &mut String, t: &str| {
-        if !s.is_empty() {
-            s.push(' ');
+    let clean = |token: &str| token.replace('#', "");
+    let push = |list: &mut String, token: &str| {
+        if !list.is_empty() {
+            list.push(' ');
         }
-        s.push_str(t);
+        list.push_str(token);
     };
-    for (op, i1, i2, j1, j2) in diff_ops(&a, &b) {
+    for (op, i1, i2, j1, j2) in diff_ops(&text_tokens, &heard_tokens) {
         match op {
             Op::Insert => {
-                let k = if i1 > 0 { owner[i1 - 1] } else { 0 };
-                for t in &b[j1..j2] {
-                    push(&mut extra[k], &clean(t));
+                let word_index = if i1 > 0 { owner[i1 - 1] } else { 0 };
+                for token in &heard_tokens[j1..j2] {
+                    push(&mut extra[word_index], &clean(token));
                 }
             }
             Op::Delete => {
-                for i in i1..i2 {
-                    wrong[owner[i]] = Some(String::new());
+                for token_index in i1..i2 {
+                    wrong[owner[token_index]] = Some(String::new());
                 }
             }
             Op::Replace => {
                 // each word paired with the heard word most like it: "suite of about two hundred" heard as "suit"
                 // gives "suite" -> "suit", and the rest were not heard
-                let pairs = pair_up(&a[i1..i2], &b[j1..j2], 0.4);
-                for i in i1..i2 {
-                    let k = owner[i];
-                    let heard_as = pairs.get(&(i - i1)).map(|j| clean(&b[j1 + j])).unwrap_or_default();
-                    wrong[k] = Some(match &wrong[k] {
-                        Some(w) if !w.is_empty() && !heard_as.is_empty() => format!("{w} {heard_as}"),
-                        Some(w) if !w.is_empty() => w.clone(),
+                let pairs = pair_up(&text_tokens[i1..i2], &heard_tokens[j1..j2], 0.4);
+                for token_index in i1..i2 {
+                    let word_index = owner[token_index];
+                    let heard_as = pairs.get(&(token_index - i1)).map(|heard_offset| clean(&heard_tokens[j1 + heard_offset])).unwrap_or_default();
+                    wrong[word_index] = Some(match &wrong[word_index] {
+                        Some(so_far) if !so_far.is_empty() && !heard_as.is_empty() => format!("{so_far} {heard_as}"),
+                        Some(so_far) if !so_far.is_empty() => so_far.clone(),
                         _ => heard_as,
                     });
                 }
                 let paired: HashSet<usize> = pairs.values().copied().collect();
-                for j in 0..(j2 - j1) {
-                    if paired.contains(&j) {
+                for heard_offset in 0..(j2 - j1) {
+                    if paired.contains(&heard_offset) {
                         continue;
                     }
                     // heard but matching no word of the text: an extra after the word before it
-                    let before = pairs.iter().filter(|(_, jj)| **jj < j).map(|(i, _)| *i).max();
-                    let k = match before {
-                        Some(i) => owner[i1 + i],
+                    let before = pairs.iter().filter(|(_, paired_offset)| **paired_offset < heard_offset).map(|(text_offset, _)| *text_offset).max();
+                    let word_index = match before {
+                        Some(text_offset) => owner[i1 + text_offset],
                         None if i1 > 0 => owner[i1 - 1],
                         None => owner[i1],
                     };
-                    push(&mut extra[k], &clean(&b[j1 + j]));
+                    push(&mut extra[word_index], &clean(&heard_tokens[j1 + heard_offset]));
                 }
             }
         }
     }
     // words that own no token of their own share the verdict of the word before ("fifty-nine" of "nineteen fifty-nine")
     let owned: HashSet<usize> = owner.iter().copied().collect();
-    for k in 1..sw.len() {
-        if !owned.contains(&k) {
-            wrong[k] = wrong[k - 1].clone();
+    for word_index in 1..sw.len() {
+        if !owned.contains(&word_index) {
+            wrong[word_index] = wrong[word_index - 1].clone();
         }
     }
     (wrong, extra)
@@ -380,27 +380,27 @@ pub fn judge(text: &str, heard: &str, mine: &[WordTime], reference: Option<&[Wor
     let (wrong, extra) = heard_words(text, heard);
     text.split_whitespace()
         .enumerate()
-        .map(|(k, w)| {
-            let s = mine.get(k).and_then(|m| m.score);
-            let r = reference.and_then(|r| r.get(k)).and_then(|m| m.score);
-            let status = if wrong[k].is_some() {
+        .map(|(word_index, word)| {
+            let score = mine.get(word_index).and_then(|word_time| word_time.score);
+            let reference_score = reference.and_then(|reference_times| reference_times.get(word_index)).and_then(|word_time| word_time.score);
+            let status = if wrong[word_index].is_some() {
                 "wrong"
             } else {
-                match (s, r) {
-                    (Some(s), Some(r)) if s < OFF_BELOW && r - s > OFF_VS_REFERENCE => "unclear",
-                    (Some(s), None) if s < OFF_FLOOR => "unclear",
+                match (score, reference_score) {
+                    (Some(score), Some(reference_score)) if score < OFF_BELOW && reference_score - score > OFF_VS_REFERENCE => "unclear",
+                    (Some(score), None) if score < OFF_FLOOR => "unclear",
                     _ => "good",
                 }
             };
             WordResult {
-                w: w.to_string(),
-                t: mine.get(k).and_then(|m| m.t),
-                score: s,
-                reference: r,
+                w: word.to_string(),
+                t: mine.get(word_index).and_then(|word_time| word_time.t),
+                score,
+                reference: reference_score,
                 status: status.into(),
-                heard: wrong[k].clone(),
-                extra: extra[k].clone(),
-                letters: mine.get(k).and_then(|m| m.letters.clone()),
+                heard: wrong[word_index].clone(),
+                extra: extra[word_index].clone(),
+                letters: mine.get(word_index).and_then(|word_time| word_time.letters.clone()),
             }
         })
         .collect()
@@ -410,9 +410,9 @@ pub fn judge(text: &str, heard: &str, mine: &[WordTime], reference: Option<&[Wor
 mod tests {
     use super::*;
 
-    fn heard(text: &str, h: &str) -> Vec<(String, String)> {
-        let (w, _) = heard_words(text, h);
-        text.split_whitespace().zip(w).filter_map(|(t, w)| w.map(|w| (t.to_string(), w))).collect()
+    fn heard(text: &str, recognized: &str) -> Vec<(String, String)> {
+        let (verdicts, _) = heard_words(text, recognized);
+        text.split_whitespace().zip(verdicts).filter_map(|(word, verdict)| verdict.map(|heard_as| (word.to_string(), heard_as))).collect()
     }
 
     #[test]
@@ -433,7 +433,7 @@ mod tests {
             vec![("veered".into(), "weird".into()), ("off".into(), "of".into())]
         );
         assert_eq!(heard("NASA's Ice Sat Two satellite lost altitude", "NASA's ice set to satellite lost attitude")
-            .into_iter().find(|(w, _)| w == "altitude"), Some(("altitude".into(), "attitude".into())));
+            .into_iter().find(|(word, _)| word == "altitude"), Some(("altitude".into(), "attitude".into())));
     }
 
     #[test]
@@ -443,8 +443,8 @@ mod tests {
             "I built a playwright suit. I started",
         );
         assert_eq!(got[0], ("suite".into(), "suit".into()));
-        assert!(got[1..].iter().all(|(_, h)| h.is_empty()), "{got:?}");
-        assert!(got.iter().any(|(w, _)| w == "hundred"));
+        assert!(got[1..].iter().all(|(_, heard_as)| heard_as.is_empty()), "{got:?}");
+        assert!(got.iter().any(|(word, _)| word == "hundred"));
     }
 
     #[test]
@@ -462,8 +462,8 @@ mod tests {
             WordTime { t: Some([0.7, 1.0]), score: Some(0.9), letters: None },
         ];
         let reference = vec![WordTime { t: None, score: Some(0.95), letters: None }; 3];
-        let r = judge(text, "the beautiful sinks", &mine, Some(&reference));
-        assert_eq!(r.iter().map(|w| w.status.as_str()).collect::<Vec<_>>(), vec!["good", "unclear", "wrong"]);
-        assert_eq!(r[2].heard.as_deref(), Some("sinks"));
+        let results = judge(text, "the beautiful sinks", &mine, Some(&reference));
+        assert_eq!(results.iter().map(|word| word.status.as_str()).collect::<Vec<_>>(), vec!["good", "unclear", "wrong"]);
+        assert_eq!(results[2].heard.as_deref(), Some("sinks"));
     }
 }

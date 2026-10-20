@@ -33,10 +33,10 @@
       <div class="as">
         <span class="lbl">Practise it as</span>
         <div class="modes" role="group" aria-label="Practise as">
-          @for (m of modes; track m.id) {
-            <button type="button" [class.on]="draftMode() === m.id" [attr.aria-pressed]="draftMode() === m.id" (click)="draftMode.set(m.id)">
-              <b>{{ m.label }}</b>
-              <span>{{ words() ? m.unit(counts()[m.id]) : m.id === 'whole' ? 'in one go' : m.id === 'sentences' ? 'one at a time' : 'cut at commas' }}</span>
+          @for (mode of modes; track mode.id) {
+            <button type="button" [class.on]="draftMode() === mode.id" [attr.aria-pressed]="draftMode() === mode.id" (click)="draftMode.set(mode.id)">
+              <b>{{ mode.label }}</b>
+              <span>{{ words() ? mode.unit(counts()[mode.id]) : mode.id === 'whole' ? 'in one go' : mode.id === 'sentences' ? 'one at a time' : 'cut at commas' }}</span>
             </button>
           }
         </div>
@@ -56,15 +56,15 @@
     <section class="card week" aria-label="This week">
       <div class="head">
         <span class="eyebrow">This week</span>
-        @if (store.activity(); as a) {
-          <span class="hint">{{ a.tries }} {{ a.tries === 1 ? 'try' : 'tries' }}{{ a.average != null ? ' · avg ' + a.average + '%' : '' }}</span>
+        @if (store.activity(); as activity) {
+          <span class="hint">{{ activity.tries }} {{ activity.tries === 1 ? 'try' : 'tries' }}{{ activity.average != null ? ' · avg ' + activity.average + '%' : '' }}</span>
         }
       </div>
       <div class="bars">
-        @for (d of week(); track d.day) {
-          <div class="day" [title]="d.tries + ' tries'">
-            <span class="bar" [class]="d.tone" [style.height.px]="d.h"></span>
-            <span class="lbl">{{ d.day }}</span>
+        @for (bar of week(); track bar.day) {
+          <div class="day" [title]="bar.tries + ' tries'">
+            <span class="bar" [class]="bar.tone" [style.height.px]="bar.h"></span>
+            <span class="lbl">{{ bar.day }}</span>
           </div>
         }
       </div>
@@ -87,21 +87,21 @@
       </div>
     }
 
-    @if (resume(); as c) {
-      @let r = ring(c);
-      <button class="resume" (click)="continue(c)">
+    @if (resume(); as card) {
+      @let progress = ring(card);
+      <button class="resume" (click)="continue(card)">
         <span class="ring">
           <svg width="58" height="58" viewBox="0 0 64 64" aria-hidden="true">
             <circle cx="32" cy="32" r="27" class="track" />
-            <circle cx="32" cy="32" r="27" class="value" [attr.stroke-dasharray]="r.dash" />
+            <circle cx="32" cy="32" r="27" class="value" [attr.stroke-dasharray]="progress.dash" />
           </svg>
-          <span>{{ r.done }}/{{ r.total }}</span>
+          <span>{{ progress.done }}/{{ progress.total }}</span>
         </span>
         <span class="what">
           <span class="kicker">Continue where you left off</span>
-          <span class="t">{{ c.t.title }}</span>
-          @if (c.next) {
-            <span class="next">Next: “{{ c.next.text }}”</span>
+          <span class="t">{{ card.t.title }}</span>
+          @if (card.next) {
+            <span class="next">Next: “{{ card.next.text }}”</span>
           }
         </span>
         <span class="cta"><app-icon name="play" [size]="14" /> Continue</span>
@@ -109,41 +109,41 @@
     }
 
     <ul class="grid">
-      @for (c of shown(); track c.t.id) {
-        <li class="card text" (click)="renaming() !== c.t.id && confirming() !== c.t.id && store.open(c.t.id)">
+      @for (card of shown(); track card.t.id) {
+        <li class="card text" (click)="renaming() !== card.t.id && confirming() !== card.t.id && store.open(card.t.id)">
           <div class="row">
-            @if (renaming() === c.t.id) {
+            @if (renaming() === card.t.id) {
               <input
                 class="field"
-                [value]="c.t.title"
+                [value]="card.t.title"
                 (click)="$event.stopPropagation()"
-                (keydown.enter)="rename(c.t, $any($event.target).value)"
+                (keydown.enter)="rename(card.t, $any($event.target).value)"
                 (keydown.escape)="renaming.set(null)"
-                (blur)="rename(c.t, $any($event.target).value)"
+                (blur)="rename(card.t, $any($event.target).value)"
                 aria-label="Title"
                 autofocus
               />
             } @else {
-              <h3>{{ c.t.title }}</h3>
+              <h3>{{ card.t.title }}</h3>
             }
-            <span class="pill" [class]="band(c.t.average) || 'none'">{{ c.t.average != null ? c.t.average + '%' : 'new' }}</span>
+            <span class="pill" [class]="band(card.t.average) || 'none'">{{ card.t.average != null ? card.t.average + '%' : 'new' }}</span>
           </div>
-          <p>{{ c.t.text }}</p>
+          <p>{{ card.t.text }}</p>
           <div class="cells" aria-hidden="true">
-            @for (cell of c.cells; track $index) {
+            @for (cell of card.cells; track $index) {
               <span [class]="cell"></span>
             }
           </div>
           <div class="meta">
-            <span>{{ c.t.words }} words · {{ modeName(c.t.mode) }} · {{ when(c.t.opened ?? c.t.created) }}</span>
+            <span>{{ card.t.words }} words · {{ modeName(card.t.mode) }} · {{ when(card.t.opened ?? card.t.created) }}</span>
             <span class="acts" (click)="$event.stopPropagation()">
-              @if (confirming() === c.t.id) {
+              @if (confirming() === card.t.id) {
                 <span class="ask">Delete it and its recordings?</span>
                 <button class="btn ghost small" (click)="confirming.set(null)">Keep</button>
-                <button class="btn danger small" (click)="remove(c.t)">Delete</button>
+                <button class="btn danger small" (click)="remove(card.t)">Delete</button>
               } @else {
-                <button class="btn ghost small icon" (click)="renaming.set(c.t.id)" aria-label="Rename"><app-icon name="edit" [size]="15" /></button>
-                <button class="btn ghost small icon" (click)="confirming.set(c.t.id)" aria-label="Delete"><app-icon name="trash" [size]="15" /></button>
+                <button class="btn ghost small icon" (click)="renaming.set(card.t.id)" aria-label="Rename"><app-icon name="edit" [size]="15" /></button>
+                <button class="btn ghost small icon" (click)="confirming.set(card.t.id)" aria-label="Delete"><app-icon name="trash" [size]="15" /></button>
               }
             </span>
           </div>

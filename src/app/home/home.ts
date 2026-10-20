@@ -40,13 +40,13 @@ export class Home {
   protected readonly counts = computed(() => {
     const text = this.draft().trim();
     const list = text ? sentences(text) : [];
-    const short = list.reduce((n, s) => n + shortRanges(s.split(' ')).length, 0);
+    const short = list.reduce((total, sentence) => total + shortRanges(sentence.split(' ')).length, 0);
     return { whole: text ? 1 : 0, sentences: list.length, short };
   });
-  protected readonly modes: { id: Mode; label: string; unit: (n: number) => string }[] = [
+  protected readonly modes: { id: Mode; label: string; unit: (count: number) => string }[] = [
     { id: 'whole', label: 'Whole text', unit: () => 'in one go' },
-    { id: 'sentences', label: 'Sentences', unit: (n) => `${n} sentence${n === 1 ? '' : 's'}` },
-    { id: 'short', label: 'Short parts', unit: (n) => `${n} part${n === 1 ? '' : 's'}` },
+    { id: 'sentences', label: 'Sentences', unit: (count) => `${count} sentence${count === 1 ? '' : 's'}` },
+    { id: 'short', label: 'Short parts', unit: (count) => `${count} part${count === 1 ? '' : 's'}` },
   ];
 
   /** every text split the way it is practised, with a colour per part */
@@ -54,47 +54,47 @@ export class Home {
     params: () => this.store.texts(),
     loader: ({ params }) =>
       Promise.all(
-        params.map(async (t): Promise<Card> => {
-          const parts = await splitText(t.text, t.mode);
-          const cells = parts.map((p) => band(t.scores[p.key]?.last) || 'none');
-          const saved = Number(readSetting(`part:${t.id}:${t.mode}`, '0'));
-          const order = [...parts.keys()].map((k) => (k + saved) % parts.length);
-          const nextIndex = order.find((k) => !t.scores[parts[k].key]) ?? saved;
-          return { t, parts, cells, next: parts[nextIndex] ?? null, nextIndex };
+        params.map(async (text): Promise<Card> => {
+          const parts = await splitText(text.text, text.mode);
+          const cells = parts.map((part) => band(text.scores[part.key]?.last) || 'none');
+          const saved = Number(readSetting(`part:${text.id}:${text.mode}`, '0'));
+          const order = [...parts.keys()].map((partIndex) => (partIndex + saved) % parts.length);
+          const nextIndex = order.find((partIndex) => !text.scores[parts[partIndex].key]) ?? saved;
+          return { t: text, parts, cells, next: parts[nextIndex] ?? null, nextIndex };
         }),
       ),
   });
 
   protected readonly shown = computed(() => {
-    const q = this.query().trim().toLowerCase();
+    const search = this.query().trim().toLowerCase();
     const list = this.cards.value() ?? [];
-    return list.filter((c) => !q || c.t.title.toLowerCase().includes(q) || c.t.text.toLowerCase().includes(q));
+    return list.filter((card) => !search || card.t.title.toLowerCase().includes(search) || card.t.text.toLowerCase().includes(search));
   });
 
   /** the text opened last */
   protected readonly resume = computed(() => {
     const list = this.cards.value() ?? [];
     const last = readSetting('text', '');
-    const opened = [...list].filter((c) => c.t.opened).sort((a, b) => b.t.opened!.localeCompare(a.t.opened!));
-    return list.find((c) => c.t.id === last) ?? opened[0] ?? null;
+    const opened = [...list].filter((card) => card.t.opened).sort((first, second) => second.t.opened!.localeCompare(first.t.opened!));
+    return list.find((card) => card.t.id === last) ?? opened[0] ?? null;
   });
 
   protected readonly week = computed(() => {
-    const a = this.store.activity();
-    const top = Math.max(1, ...(a?.days.map((d) => d.tries) ?? [1]));
-    return (a?.days ?? []).map((d, i, all) => ({
-      day: new Date(d.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' }),
-      tries: d.tries,
-      h: 6 + Math.round((d.tries / top) * 64),
-      tone: i === all.length - 1 && d.tries ? 'today' : d.tries ? 'some' : 'none',
+    const activity = this.store.activity();
+    const top = Math.max(1, ...(activity?.days.map((day) => day.tries) ?? [1]));
+    return (activity?.days ?? []).map((day, dayIndex, all) => ({
+      day: new Date(day.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' }),
+      tries: day.tries,
+      h: 6 + Math.round((day.tries / top) * 64),
+      tone: dayIndex === all.length - 1 && day.tries ? 'today' : day.tries ? 'some' : 'none',
     }));
   });
 
-  protected readonly practisedParts = computed(() => this.store.texts().reduce((n, t) => n + t.practised, 0));
+  protected readonly practisedParts = computed(() => this.store.texts().reduce((total, text) => total + text.practised, 0));
 
-  protected ring(c: Card) {
-    const total = c.parts.length || 1;
-    const done = c.parts.filter((p) => c.t.scores[p.key]).length;
+  protected ring(card: Card) {
+    const total = card.parts.length || 1;
+    const done = card.parts.filter((part) => card.t.scores[part.key]).length;
     const len = 2 * Math.PI * 27;
     return { done, total, dash: `${(len * done) / total} ${len}` };
   }
@@ -107,30 +107,30 @@ export class Home {
     this.draftTitle.set('');
   }
 
-  protected continue(c: Card) {
-    this.store.open(c.t.id, c.nextIndex);
+  protected continue(card: Card) {
+    this.store.open(card.t.id, card.nextIndex);
   }
 
-  protected async rename(t: TextItem, title: string) {
+  protected async rename(text: TextItem, title: string) {
     this.renaming.set(null);
-    if (title.trim() && title.trim() !== t.title) await this.store.rename(t.id, title.trim());
+    if (title.trim() && title.trim() !== text.title) await this.store.rename(text.id, title.trim());
   }
 
-  protected async remove(t: TextItem) {
+  protected async remove(text: TextItem) {
     this.confirming.set(null);
-    await this.store.remove(t.id);
+    await this.store.remove(text.id);
   }
 
   protected when(iso: string | null) {
     if (!iso) return '';
-    const d = new Date(iso);
-    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-    if (new Date().toDateString() === d.toDateString()) return 'today';
+    const date = new Date(iso);
+    const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+    if (new Date().toDateString() === date.toDateString()) return 'today';
     if (days < 2) return 'yesterday';
-    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   }
 
-  protected modeName(m: Mode) {
-    return { whole: 'whole text', sentences: 'sentences', short: 'short parts' }[m];
+  protected modeName(mode: Mode) {
+    return { whole: 'whole text', sentences: 'sentences', short: 'short parts' }[mode];
   }
 }

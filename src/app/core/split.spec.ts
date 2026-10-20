@@ -14,7 +14,10 @@ describe('sentences', () => {
 });
 
 describe('shortRanges', () => {
-  const cut = (s: string) => shortRanges(s.split(' ')).map(([a, b]) => s.split(' ').slice(a, b).join(' '));
+  const cut = (sentence: string) =>
+    shortRanges(sentence.split(' ')).map(([start, end]) =>
+      sentence.split(' ').slice(start, end).join(' '),
+    );
 
   it('cuts a long sentence at commas', () => {
     expect(cut('I have about eleven years of professional experience in software development, since 2015, and almost all of it is front-end work.')).toEqual([

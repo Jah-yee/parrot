@@ -51,18 +51,18 @@ def duration(path):
                                 capture_output=True, text=True).stdout or 0)
 
 
-def peaks(path, n=92):
-    """The loudest sample of each of n equal slices of a recording, scaled so the loudest slice is 1."""
+def peaks(path, slice_count=92):
+    """The loudest sample of each of slice_count equal slices of a recording, scaled so the loudest slice is 1."""
     import numpy as np
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
                          capture_output=True, check=True).stdout
-    a = np.abs(np.frombuffer(raw, dtype=np.int16).astype(np.float32))
-    if not len(a):
+    levels = np.abs(np.frombuffer(raw, dtype=np.int16).astype(np.float32))
+    if not len(levels):
         return []
-    slices = np.array_split(a, n)
-    p = np.array([s.max() if len(s) else 0 for s in slices])
-    top = p.max() or 1
-    return [round(float(v / top), 3) for v in p]
+    slices = np.array_split(levels, slice_count)
+    loudest = np.array([piece.max() if len(piece) else 0 for piece in slices])
+    top = loudest.max() or 1
+    return [round(float(level / top), 3) for level in loudest]
 
 
 def align(wav16, txt):
@@ -70,26 +70,26 @@ def align(wav16, txt):
     import torch
     import torchaudio
     with _lock:
-        model, tok, al, labels = aligner()
-        wave, sr = torchaudio.load(wav16)
-        sw = txt.split()
-        clean = ["".join(c for c in w.lower().replace("’", "'") if c in labels) for w in sw]
-        idx = [k for k, c in enumerate(clean) if c]
-        out = [{"t": None, "score": None} for _ in sw]
-        if not idx:
+        model, tokenizer, span_aligner, labels = aligner()
+        wave, sample_rate = torchaudio.load(wav16)
+        script_words = txt.split()
+        clean = ["".join(char for char in word.lower().replace("’", "'") if char in labels) for word in script_words]
+        placeable = [index for index, cleaned in enumerate(clean) if cleaned]
+        out = [{"t": None, "score": None} for _ in script_words]
+        if not placeable:
             return out
         with torch.inference_mode():
             emission, _ = model(wave)
             try:
-                spans = al(emission[0], tok([clean[k] for k in idx]))
+                spans = span_aligner(emission[0], tokenizer([clean[index] for index in placeable]))
             except RuntimeError:
                 # the recording is too short for the text (stopped early): nothing can be placed, every word scores 0
-                return [{"t": None, "score": 0.0} for _ in sw]
-    ratio = wave.size(1) / emission.size(1) / sr
-    for k, sp in zip(idx, spans):
-        frames = sum(s.end - s.start for s in sp) or 1
-        out[k] = {"t": [round(sp[0].start * ratio, 3), round(sp[-1].end * ratio, 3)],
-                  "score": round(sum(s.score * (s.end - s.start) for s in sp) / frames, 3)}
+                return [{"t": None, "score": 0.0} for _ in script_words]
+    ratio = wave.size(1) / emission.size(1) / sample_rate
+    for index, word_spans in zip(placeable, spans):
+        frames = sum(span.end - span.start for span in word_spans) or 1
+        out[index] = {"t": [round(word_spans[0].start * ratio, 3), round(word_spans[-1].end * ratio, 3)],
+                      "score": round(sum(span.score * (span.end - span.start) for span in word_spans) / frames, 3)}
     return out
 
 
@@ -98,26 +98,28 @@ def transcribe(wav16, words=None, limit=25.0):
     next window, so a take longer than limit is cut into chunks at the pauses between words (word times from the
     aligner) and each chunk is heard on its own."""
     def hear(path):
-        r = subprocess.run(["whisper-cli", "-m", WHISPER_MODEL, "-f", path, "-nt", "-np"], capture_output=True, text=True)
-        return " ".join(r.stdout.split())
+        result = subprocess.run(["whisper-cli", "-m", WHISPER_MODEL, "-f", path, "-nt", "-np"],
+                                capture_output=True, text=True)
+        return " ".join(result.stdout.split())
     ensure_whisper_model()
-    times = [w["t"] for w in (words or []) if w["t"]]
+    times = [word["t"] for word in (words or []) if word["t"]]
     if not times or times[-1][1] <= limit:
         return hear(wav16)
-    gaps = [(a[1], b[0]) for a, b in zip(times, times[1:])]
+    gaps = [(earlier[1], later[0]) for earlier, later in zip(times, times[1:])]
     cuts, start = [], 0.0
     while times[-1][1] - start > limit:
         # the widest pause in the last 40% of the window, so every chunk keeps some context
-        window = [(b - a, (a + b) / 2) for a, b in gaps if start + limit * 0.6 < (a + b) / 2 < start + limit]
+        window = [(gap_end - gap_start, (gap_start + gap_end) / 2) for gap_start, gap_end in gaps
+                  if start + limit * 0.6 < (gap_start + gap_end) / 2 < start + limit]
         cut = max(window)[1] if window else start + limit
         cuts.append(cut)
         start = cut
     out, edges = [], [0.0] + cuts + [None]
     with tempfile.TemporaryDirectory() as tmp:
-        for k, (a, b) in enumerate(zip(edges, edges[1:])):
-            part = os.path.join(tmp, f"{k}.wav")
-            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav16, "-ss", f"{a:.3f}",
-                            *(["-to", f"{b:.3f}"] if b else []), part], check=True)
+        for chunk, (chunk_start, chunk_end) in enumerate(zip(edges, edges[1:])):
+            part = os.path.join(tmp, f"{chunk}.wav")
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav16, "-ss", f"{chunk_start:.3f}",
+                            *(["-to", f"{chunk_end:.3f}"] if chunk_end else []), part], check=True)
             out.append(hear(part))
     return " ".join(out)
 
@@ -149,16 +151,16 @@ def check(folder, txt, body, ext, ref=None):
         # stopped before the end: the aligner squeezes the whole text into the take and the words that were said
         # score low, so score only the words up to the last one whisper heard; the rest count as missed
         wrong, _ = text.heard_words(txt, heard)
-        said = max((k for k, w in enumerate(wrong) if w is None), default=-1) + 1
-        if 0 < said < len(mine) and all(w == "" for w in wrong[said:]):
+        said = max((index for index, heard_as in enumerate(wrong) if heard_as is None), default=-1) + 1
+        if 0 < said < len(mine) and all(heard_as == "" for heard_as in wrong[said:]):
             mine[:said] = align(wav, " ".join(txt.split()[:said]))
             mine[said:] = [{"t": None, "score": 0.0} for _ in mine[said:]]
     words = text.judge(txt, heard, mine, ref)
-    good = sum(w["status"] == "good" for w in words)
+    good = sum(word["status"] == "good" for word in words)
     spoken = said if 0 < said < len(words) else len(words)
-    r = {"id": stamp, "when": datetime.datetime.now().isoformat(timespec="seconds"), "text": txt, "heard": heard,
-         "words": words, "duration": round(dur, 2), "wpm": round(spoken / dur * 60) if dur else 0,
-         "score": round(100 * good / max(1, len(words))),
-         "audio": "/files/" + os.path.relpath(mp3, paths.DATA)}
-    json.dump(r, open(os.path.join(folder, stamp + ".json"), "w"), indent=1)
-    return r
+    result = {"id": stamp, "when": datetime.datetime.now().isoformat(timespec="seconds"), "text": txt, "heard": heard,
+              "words": words, "duration": round(dur, 2), "wpm": round(spoken / dur * 60) if dur else 0,
+              "score": round(100 * good / max(1, len(words))),
+              "audio": "/files/" + os.path.relpath(mp3, paths.DATA)}
+    json.dump(result, open(os.path.join(folder, stamp + ".json"), "w"), indent=1)
+    return result

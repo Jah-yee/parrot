@@ -6,9 +6,9 @@ import { Icon } from '../shared/icon';
 
 type Theme = 'system' | 'light' | 'dark';
 
-export function applyTheme(t: Theme) {
-  if (t === 'system') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
+export function applyTheme(theme: Theme) {
+  if (theme === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
 }
 
 @Component({
@@ -27,8 +27,8 @@ export function applyTheme(t: Theme) {
           <p class="hint">The voice that reads your texts and single words. Voices marked “online” send the text (never your recordings) to the provider.</p>
           <div class="row">
             <select class="field" [value]="sound.voiceName()" (change)="sound.setVoice($any($event.target).value)">
-              @for (v of sound.voices(); track v.name) {
-                <option [value]="v.name">{{ v.name }} · {{ v.lang }}{{ v.localService ? '' : ' · online' }}</option>
+              @for (voice of sound.voices(); track voice.name) {
+                <option [value]="voice.name">{{ voice.name }} · {{ voice.lang }}{{ voice.localService ? '' : ' · online' }}</option>
               }
             </select>
             <button class="btn" (click)="sound.speak('Parrot reads it, you repeat it.', 1, null)"><app-icon name="play" [size]="14" /> Try</button>
@@ -38,17 +38,17 @@ export function applyTheme(t: Theme) {
         <section>
           <span class="eyebrow">Appearance</span>
           <div class="seg">
-            @for (t of themes; track t) {
-              <button [class.on]="theme() === t" (click)="setTheme(t)">{{ t[0].toUpperCase() + t.slice(1) }}</button>
+            @for (option of themes; track option) {
+              <button [class.on]="theme() === option" (click)="setTheme(option)">{{ option[0].toUpperCase() + option.slice(1) }}</button>
             }
           </div>
         </section>
 
         <section>
           <span class="eyebrow">Speech engine</span>
-          @if (health.value(); as h) {
-            <p class="ok"><span class="dot"></span> {{ h.models.whisper && h.models.aligner ? 'Ready, on this computer' : 'Speech models not downloaded yet' }}</p>
-            <p class="hint">Texts and recordings are kept on this computer, in<br /><code>{{ h.data }}</code></p>
+          @if (health.value(); as info) {
+            <p class="ok"><span class="dot"></span> {{ info.models.whisper && info.models.aligner ? 'Ready, on this computer' : 'Speech models not downloaded yet' }}</p>
+            <p class="hint">Texts and recordings are kept on this computer, in<br /><code>{{ info.data }}</code></p>
           } @else if (health.error()) {
             <p class="bad">The speech engine is not answering.</p>
           }
@@ -142,7 +142,7 @@ export class Settings {
   protected health = resource({ params: () => this.check(), loader: () => this.engine.info() });
 
   open() {
-    this.check.update((n) => n + 1);
+    this.check.update((count) => count + 1);
     this.dialog().nativeElement.showModal();
   }
 
@@ -150,13 +150,13 @@ export class Settings {
     this.dialog().nativeElement.close();
   }
 
-  protected backdrop(e: MouseEvent) {
-    if (e.target === this.dialog().nativeElement) this.close();
+  protected backdrop(event: MouseEvent) {
+    if (event.target === this.dialog().nativeElement) this.close();
   }
 
-  protected setTheme(t: Theme) {
-    this.theme.set(t);
-    writeSetting('theme', t);
-    applyTheme(t);
+  protected setTheme(theme: Theme) {
+    this.theme.set(theme);
+    writeSetting('theme', theme);
+    applyTheme(theme);
   }
 }

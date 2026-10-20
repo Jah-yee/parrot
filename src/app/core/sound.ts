@@ -19,7 +19,7 @@ export class Sound {
   private player = new window.Audio();
   private clip = new window.Audio();
   private frame = 0;
-  private onTime: ((t: number) => void) | null = null;
+  private onTime: ((seconds: number) => void) | null = null;
   private onEnd: (() => void) | null = null;
   private synthMode = false;
   private utterance: SpeechSynthesisUtterance | null = null;
@@ -29,13 +29,14 @@ export class Sound {
   constructor() {
     const load = () => {
       const pref = ['Samantha', 'Ava', 'Allison', 'Alex', 'Daniel', 'Google US English'];
-      const rank = (v: SpeechSynthesisVoice) => {
-        const i = pref.findIndex((p) => v.name.includes(p));
-        return (i < 0 ? 50 : i) + (v.localService ? 0 : 100);
+      const rank = (voice: SpeechSynthesisVoice) => {
+        const prefIndex = pref.findIndex((name) => voice.name.includes(name));
+        return (prefIndex < 0 ? 50 : prefIndex) + (voice.localService ? 0 : 100);
       };
-      const list = speechSynthesis.getVoices().filter((v) => v.lang.startsWith('en'));
-      this.voices.set(list.sort((a, b) => rank(a) - rank(b)));
-      if (!list.some((v) => v.name === this.voiceName()) && list.length) this.voiceName.set(list[0].name);
+      const list = speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+      this.voices.set(list.sort((left, right) => rank(left) - rank(right)));
+      if (!list.some((voice) => voice.name === this.voiceName()) && list.length)
+        this.voiceName.set(list[0].name);
     };
     speechSynthesis.onvoiceschanged = load;
     load();
@@ -62,27 +63,27 @@ export class Sound {
   /** Speak the reading from a character on. Pausing a voice is unreliable in browsers (some voices ignore it), so a
    * pause stops the reading and remembers the word it reached, and resuming speaks the rest from that word. */
   private utter(from: number) {
-    const s = this.synth!;
-    s.from = from;
-    const u = new SpeechSynthesisUtterance(s.text.slice(from));
-    u.voice = this.voices().find((v) => v.name === this.voiceName()) ?? null;
-    u.lang = 'en-US';
-    u.rate = s.rate;
-    u.onboundary = (e) => {
-      if (e.name !== 'word') return;
-      s.at = from + e.charIndex;
-      s.onWord?.(s.at);
+    const synth = this.synth!;
+    synth.from = from;
+    const utterance = new SpeechSynthesisUtterance(synth.text.slice(from));
+    utterance.voice = this.voices().find((voice) => voice.name === this.voiceName()) ?? null;
+    utterance.lang = 'en-US';
+    utterance.rate = synth.rate;
+    utterance.onboundary = (event) => {
+      if (event.name !== 'word') return;
+      synth.at = from + event.charIndex;
+      synth.onWord?.(synth.at);
     };
-    u.onend = u.onerror = () => {
+    utterance.onend = utterance.onerror = () => {
       // cancel() ends the previous utterance a moment later: only the current one may finish the reading
-      if (this.utterance === u) this.ended();
+      if (this.utterance === utterance) this.ended();
     };
-    this.utterance = u;
-    speechSynthesis.speak(u);
+    this.utterance = utterance;
+    speechSynthesis.speak(utterance);
   }
 
   /** A whole recording (or a clip URL) with a time callback for the highlight. */
-  play(url: string, track: Track, onTime?: (t: number) => void): Promise<void> {
+  play(url: string, track: Track, onTime?: (seconds: number) => void): Promise<void> {
     this.stop();
     return new Promise((resolve) => {
       this.player.src = url;

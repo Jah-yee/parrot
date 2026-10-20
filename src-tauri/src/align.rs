@@ -20,7 +20,7 @@ fn environment() -> Result<&'static ort::environment::Environment, String> {
     if let Some(env) = ENVIRONMENT.get() {
         return Ok(env);
     }
-    let env = ort::init().with_name("parrot").build().map_err(|e| e.to_string())?;
+    let env = ort::init().with_name("parrot").build().map_err(|error| error.to_string())?;
     Ok(ENVIRONMENT.get_or_init(|| env))
 }
 
@@ -30,9 +30,9 @@ const LETTERS: &str = "'-abcdefghijklmnopqrstuvwxyz";
 const BLANK: usize = 0;
 const SEPARATOR: usize = 4;
 
-fn token(c: char) -> Option<usize> {
-    let c = if c == '\u{2019}' { '\'' } else { c.to_ascii_lowercase() };
-    if c == '-' { None } else { LETTERS.find(c).map(|i| i + 5) }
+fn token(character: char) -> Option<usize> {
+    let character = if character == '\u{2019}' { '\'' } else { character.to_ascii_lowercase() };
+    if character == '-' { None } else { LETTERS.find(character).map(|letter_index| letter_index + 5) }
 }
 
 pub struct Aligner {
@@ -42,31 +42,31 @@ pub struct Aligner {
 impl Aligner {
     pub fn load(model: &Path) -> Result<Self, String> {
         let session = Session::builder(environment()?)
-            .and_then(|mut b| b.commit_from_file(model))
-            .map_err(|e| format!("could not load the aligner: {e}"))?;
+            .and_then(|mut builder| builder.commit_from_file(model))
+            .map_err(|error| format!("could not load the aligner: {error}"))?;
         Ok(Self { session })
     }
 
     /// Per-frame log probabilities of the tokens, for 16 kHz mono audio.
     fn emissions(&mut self, audio: &[f32]) -> Result<(Vec<[f32; TOKENS]>, f64), String> {
-        let n = audio.len().max(1);
-        let mean = audio.iter().sum::<f32>() / n as f32;
-        let var = audio.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / n as f32;
-        let norm: Vec<f32> = audio.iter().map(|x| (x - mean) / (var + 1e-7).sqrt()).collect();
-        let input = Tensor::from_array(([1usize, norm.len()], norm)).map_err(|e| e.to_string())?;
-        let out = self.session.run(ort::inputs!["audio" => input]).map_err(|e| format!("aligner failed: {e}"))?;
-        let (shape, logits) = out["logits"].try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
+        let sample_count = audio.len().max(1);
+        let mean = audio.iter().sum::<f32>() / sample_count as f32;
+        let var = audio.iter().map(|sample| (sample - mean).powi(2)).sum::<f32>() / sample_count as f32;
+        let norm: Vec<f32> = audio.iter().map(|sample| (sample - mean) / (var + 1e-7).sqrt()).collect();
+        let input = Tensor::from_array(([1usize, norm.len()], norm)).map_err(|error| error.to_string())?;
+        let out = self.session.run(ort::inputs!["audio" => input]).map_err(|error| format!("aligner failed: {error}"))?;
+        let (shape, logits) = out["logits"].try_extract_tensor::<f32>().map_err(|error| error.to_string())?;
         let frames = shape[1] as usize;
         let rows = (0..frames)
-            .map(|t| {
-                let row = &logits[t * TOKENS..(t + 1) * TOKENS];
+            .map(|frame| {
+                let row = &logits[frame * TOKENS..(frame + 1) * TOKENS];
                 let max = row.iter().cloned().fold(f32::MIN, f32::max);
-                let lse = max + row.iter().map(|x| (x - max).exp()).sum::<f32>().ln();
-                let mut r = [0f32; TOKENS];
-                for (i, x) in row.iter().enumerate() {
-                    r[i] = x - lse;
+                let lse = max + row.iter().map(|logit| (logit - max).exp()).sum::<f32>().ln();
+                let mut log_probs = [0f32; TOKENS];
+                for (token_index, logit) in row.iter().enumerate() {
+                    log_probs[token_index] = logit - lse;
                 }
-                r
+                log_probs
             })
             .collect();
         Ok((rows, audio.len() as f64 / frames.max(1) as f64 / 16000.0))
@@ -81,8 +81,9 @@ impl Aligner {
         let mut targets: Vec<usize> = vec![];
         let mut owner: Vec<Option<usize>> = vec![]; // the word each target token spells, None for separators
         let mut place: Vec<usize> = vec![]; // which character of its word each target token is
-        for (k, w) in words.iter().enumerate() {
-            let letters: Vec<(usize, usize)> = w.chars().enumerate().filter_map(|(i, c)| token(c).map(|t| (i, t))).collect();
+        for (word_index, word) in words.iter().enumerate() {
+            let letters: Vec<(usize, usize)> =
+                word.chars().enumerate().filter_map(|(char_index, character)| token(character).map(|token_id| (char_index, token_id))).collect();
             if letters.is_empty() {
                 continue;
             }
@@ -91,10 +92,10 @@ impl Aligner {
                 owner.push(None);
                 place.push(0);
             }
-            for (i, l) in letters {
-                targets.push(l);
-                owner.push(Some(k));
-                place.push(i);
+            for (char_index, letter_token) in letters {
+                targets.push(letter_token);
+                owner.push(Some(word_index));
+                place.push(char_index);
             }
         }
         if targets.is_empty() {
@@ -112,29 +113,29 @@ impl Aligner {
         // and per letter: the mean probability over the frames the path gave it
         let mut letter_sum = vec![0f64; targets.len()];
         let mut letter_count = vec![0usize; targets.len()];
-        for (t, state) in path.iter().enumerate() {
-            if let Some(j) = state
-                && let Some(k) = owner[*j]
+        for (frame, state) in path.iter().enumerate() {
+            if let Some(target) = state
+                && let Some(word_index) = owner[*target]
             {
-                let p = (em[t][targets[*j]] as f64).exp();
-                first[k] = first[k].min(t);
-                last[k] = last[k].max(t);
-                sum[k] += p;
-                count[k] += 1;
-                letter_sum[*j] += p;
-                letter_count[*j] += 1;
+                let probability = (em[frame][targets[*target]] as f64).exp();
+                first[word_index] = first[word_index].min(frame);
+                last[word_index] = last[word_index].max(frame);
+                sum[word_index] += probability;
+                count[word_index] += 1;
+                letter_sum[*target] += probability;
+                letter_count[*target] += 1;
             }
         }
-        let r = |x: f64| (x * 1000.0).round() / 1000.0;
-        for k in 0..words.len() {
-            if count[k] > 0 {
-                let mut letters = vec![None; words[k].chars().count()];
-                for j in (0..targets.len()).filter(|&j| owner[j] == Some(k) && letter_count[j] > 0) {
-                    letters[place[j]] = Some(r(letter_sum[j] / letter_count[j] as f64));
+        let round3 = |value: f64| (value * 1000.0).round() / 1000.0;
+        for word_index in 0..words.len() {
+            if count[word_index] > 0 {
+                let mut letters = vec![None; words[word_index].chars().count()];
+                for target in (0..targets.len()).filter(|&target| owner[target] == Some(word_index) && letter_count[target] > 0) {
+                    letters[place[target]] = Some(round3(letter_sum[target] / letter_count[target] as f64));
                 }
-                out[k] = WordTime {
-                    t: Some([r(first[k] as f64 * secs_per_frame), r((last[k] + 1) as f64 * secs_per_frame)]),
-                    score: Some(r(sum[k] / count[k] as f64)),
+                out[word_index] = WordTime {
+                    t: Some([round3(first[word_index] as f64 * secs_per_frame), round3((last[word_index] + 1) as f64 * secs_per_frame)]),
+                    score: Some(round3(sum[word_index] / count[word_index] as f64)),
                     letters: Some(letters),
                 };
             }
@@ -149,8 +150,8 @@ impl Aligner {
 fn viterbi(em: &[[f32; TOKENS]], targets: &[usize]) -> Option<Vec<Option<usize>>> {
     let frames = em.len();
     let states = 2 * targets.len() + 1; // blank, t0, blank, t1, ... blank
-    let label = |s: usize| if s % 2 == 0 { BLANK } else { targets[s / 2] };
-    let needed = targets.len() + targets.windows(2).filter(|w| w[0] == w[1]).count();
+    let label = |state: usize| if state % 2 == 0 { BLANK } else { targets[state / 2] };
+    let needed = targets.len() + targets.windows(2).filter(|pair| pair[0] == pair[1]).count();
     if frames < needed {
         return None;
     }
@@ -159,32 +160,32 @@ fn viterbi(em: &[[f32; TOKENS]], targets: &[usize]) -> Option<Vec<Option<usize>>
     let mut back = vec![vec![0u8; states]; frames]; // 0: stay, 1: from s-1, 2: from s-2
     score[0] = em[0][BLANK];
     score[1] = em[0][label(1)];
-    for t in 1..frames {
+    for frame in 1..frames {
         let prev = score.clone();
-        for s in 0..states {
-            let mut best = prev[s];
+        for state in 0..states {
+            let mut best = prev[state];
             let mut how = 0u8;
-            if s >= 1 && prev[s - 1] > best {
-                best = prev[s - 1];
+            if state >= 1 && prev[state - 1] > best {
+                best = prev[state - 1];
                 how = 1;
             }
-            if s >= 2 && s % 2 == 1 && label(s) != label(s - 2) && prev[s - 2] > best {
-                best = prev[s - 2];
+            if state >= 2 && state % 2 == 1 && label(state) != label(state - 2) && prev[state - 2] > best {
+                best = prev[state - 2];
                 how = 2;
             }
-            score[s] = if best == NEG { NEG } else { best + em[t][label(s)] };
-            back[t][s] = how;
+            score[state] = if best == NEG { NEG } else { best + em[frame][label(state)] };
+            back[frame][state] = how;
         }
     }
-    let mut s = if score[states - 1] >= score[states - 2] { states - 1 } else { states - 2 };
-    if score[s] == NEG {
+    let mut state = if score[states - 1] >= score[states - 2] { states - 1 } else { states - 2 };
+    if score[state] == NEG {
         return None;
     }
     let mut path = vec![None; frames];
-    for t in (0..frames).rev() {
-        path[t] = if s % 2 == 1 { Some(s / 2) } else { None };
-        if t > 0 {
-            s -= back[t][s] as usize;
+    for frame in (0..frames).rev() {
+        path[frame] = if state % 2 == 1 { Some(state / 2) } else { None };
+        if frame > 0 {
+            state -= back[frame][state] as usize;
         }
     }
     Some(path)
@@ -208,24 +209,24 @@ mod tests {
             eprintln!("skipped: no model or sample in {}", dir.display());
             return;
         }
-        let mut a = Aligner::load(&model).unwrap();
+        let mut aligner = Aligner::load(&model).unwrap();
         let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();
         let text = "They happen when particles from the Sun hit the air high above the Earth.";
-        let words = a.align(&pcm.samples, text).unwrap();
-        for (w, r) in text.split_whitespace().zip(&words) {
-            eprintln!("{w:12} {:?} {:?}", r.t, r.score);
+        let words = aligner.align(&pcm.samples, text).unwrap();
+        for (word, result) in text.split_whitespace().zip(&words) {
+            eprintln!("{word:12} {:?} {:?}", result.t, result.score);
         }
-        assert!(words.iter().all(|w| w.t.is_some()));
+        assert!(words.iter().all(|word| word.t.is_some()));
         // a score for every character, none for the full stop
         let last = words.last().unwrap().letters.as_ref().unwrap();
         assert_eq!(last.len(), "Earth.".len());
         assert!(last[..5].iter().all(Option::is_some) && last[5].is_none());
-        assert!(words.windows(2).all(|p| p[0].t.unwrap()[1] <= p[1].t.unwrap()[0] + 1e-6), "words in order");
-        let mean = words.iter().map(|w| w.score.unwrap()).sum::<f64>() / words.len() as f64;
+        assert!(words.windows(2).all(|pair| pair[0].t.unwrap()[1] <= pair[1].t.unwrap()[0] + 1e-6), "words in order");
+        let mean = words.iter().map(|word| word.score.unwrap()).sum::<f64>() / words.len() as f64;
         assert!(mean > 0.7, "a clean reading scores high: {mean}");
         // the wrong text scores clearly lower
-        let bad = a.align(&pcm.samples, "Seven green bottles were standing quietly on the kitchen wall at night.").unwrap();
-        let bad_mean = bad.iter().filter_map(|w| w.score).sum::<f64>() / bad.len() as f64;
+        let bad = aligner.align(&pcm.samples, "Seven green bottles were standing quietly on the kitchen wall at night.").unwrap();
+        let bad_mean = bad.iter().filter_map(|word| word.score).sum::<f64>() / bad.len() as f64;
         assert!(bad_mean < mean - 0.2, "{bad_mean} vs {mean}");
     }
 
@@ -235,19 +236,24 @@ mod tests {
     #[ignore]
     fn calibrate() {
         let list = std::fs::read_to_string(std::env::var("PARROT_CALIBRATE").unwrap()).unwrap();
-        let mut a = Aligner::load(&build_dir().join("wav2vec2-xlsr-53-english-int8.onnx")).unwrap();
-        for line in list.lines().filter(|l| !l.is_empty()) {
+        let mut aligner = Aligner::load(&build_dir().join("wav2vec2-xlsr-53-english-int8.onnx")).unwrap();
+        for line in list.lines().filter(|line| !line.is_empty()) {
             let (wav, text) = line.split_once('|').unwrap();
             let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();
-            let words = a.align(&crate::audio::resample(&pcm, 16000), text).unwrap();
+            let words = aligner.align(&crate::audio::resample(&pcm, 16000), text).unwrap();
             // letters under 0.6, for setting the card's colours
-            for (w, r) in text.split_whitespace().zip(&words) {
-                let low: Vec<String> = w.chars().zip(r.letters.iter().flatten()).filter_map(|(c, l)| l.filter(|&l| l < 0.6).map(|l| format!("{c}{l:.2}"))).collect();
+            for (word, result) in text.split_whitespace().zip(&words) {
+                let low: Vec<String> = word
+                    .chars()
+                    .zip(result.letters.iter().flatten())
+                    .filter_map(|(character, letter_score)| letter_score.filter(|&score| score < 0.6).map(|score| format!("{character}{score:.2}")))
+                    .collect();
                 if !low.is_empty() {
-                    println!("  low {w}: {}", low.join(" "));
+                    println!("  low {word}: {}", low.join(" "));
                 }
             }
-            let row: Vec<String> = text.split_whitespace().zip(&words).map(|(w, r)| format!("{w}:{:.2}", r.score.unwrap_or(-1.0))).collect();
+            let row: Vec<String> =
+                text.split_whitespace().zip(&words).map(|(word, result)| format!("{word}:{:.2}", result.score.unwrap_or(-1.0))).collect();
             println!("{} || {}", wav.rsplit('/').nth(1).unwrap_or(""), row.join(" "));
         }
     }

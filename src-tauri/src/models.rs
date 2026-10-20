@@ -31,13 +31,13 @@ pub const ALIGNER: Model = Model {
 
 pub const ALL: [&Model; 2] = [&WHISPER, &ALIGNER];
 
-pub fn path(dir: &Path, m: &Model) -> PathBuf {
-    dir.join(m.file)
+pub fn path(dir: &Path, model: &Model) -> PathBuf {
+    dir.join(model.file)
 }
 
 /// A model is ready when its file is there at the full size (a link to a file of that size counts).
-pub fn ready(dir: &Path, m: &Model) -> bool {
-    std::fs::metadata(path(dir, m)).map(|md| md.len() == m.bytes).unwrap_or(false)
+pub fn ready(dir: &Path, model: &Model) -> bool {
+    std::fs::metadata(path(dir, model)).map(|md| md.len() == model.bytes).unwrap_or(false)
 }
 
 #[derive(Serialize, Clone)]
@@ -50,37 +50,37 @@ struct Progress<'a> {
 /// Download every missing model, reporting "model-progress" events as it goes. A partial file is kept as
 /// <file>.part and replaced on the next try.
 pub async fn download_missing(app: &AppHandle, dir: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let client = reqwest::Client::builder().user_agent("Parrot").build().map_err(|e| e.to_string())?;
-    for m in ALL {
-        if ready(dir, m) {
+    std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+    let client = reqwest::Client::builder().user_agent("Parrot").build().map_err(|error| error.to_string())?;
+    for model in ALL {
+        if ready(dir, model) {
             continue;
         }
-        let res = client.get(m.url).send().await.map_err(|e| format!("could not download {}: {e}", m.file))?;
+        let res = client.get(model.url).send().await.map_err(|error| format!("could not download {}: {error}", model.file))?;
         if !res.status().is_success() {
-            return Err(format!("could not download {}: {}", m.file, res.status()));
+            return Err(format!("could not download {}: {}", model.file, res.status()));
         }
-        let total = res.content_length().unwrap_or(m.bytes);
-        let part = dir.join(format!("{}.part", m.file));
-        let mut out = std::fs::File::create(&part).map_err(|e| e.to_string())?;
+        let total = res.content_length().unwrap_or(model.bytes);
+        let part = dir.join(format!("{}.part", model.file));
+        let mut out = std::fs::File::create(&part).map_err(|error| error.to_string())?;
         let mut received = 0u64;
         let mut last = 0u64;
         let mut stream = res.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| format!("the download of {} stopped: {e}", m.file))?;
-            out.write_all(&chunk).map_err(|e| e.to_string())?;
+            let chunk = chunk.map_err(|error| format!("the download of {} stopped: {error}", model.file))?;
+            out.write_all(&chunk).map_err(|error| error.to_string())?;
             received += chunk.len() as u64;
             if received - last > 1_000_000 || received == total {
                 last = received;
-                let _ = app.emit("model-progress", Progress { model: m.key, received, total });
+                let _ = app.emit("model-progress", Progress { model: model.key, received, total });
             }
         }
-        out.flush().map_err(|e| e.to_string())?;
+        out.flush().map_err(|error| error.to_string())?;
         drop(out);
-        if received != m.bytes {
-            return Err(format!("{} arrived incomplete ({received} of {} bytes); try again", m.file, m.bytes));
+        if received != model.bytes {
+            return Err(format!("{} arrived incomplete ({received} of {} bytes); try again", model.file, model.bytes));
         }
-        std::fs::rename(&part, path(dir, m)).map_err(|e| e.to_string())?;
+        std::fs::rename(&part, path(dir, model)).map_err(|error| error.to_string())?;
     }
     Ok(())
 }

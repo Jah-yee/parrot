@@ -19,13 +19,13 @@ const MB = 1_000_000;
       </p>
 
       <ul class="models">
-        @for (m of models(); track m.key) {
+        @for (model of models(); track model.key) {
           <li>
             <div class="row">
-              <span class="what"><b>{{ m.name }}</b><span>{{ m.role }}</span></span>
-              <span class="size">{{ m.ready ? 'Ready' : m.mb + ' MB' }}</span>
+              <span class="what"><b>{{ model.name }}</b><span>{{ model.role }}</span></span>
+              <span class="size">{{ model.ready ? 'Ready' : model.mb + ' MB' }}</span>
             </div>
-            <div class="bar"><i [style.width.%]="m.ready ? 100 : m.pct"></i></div>
+            <div class="bar"><i [style.width.%]="model.ready ? 100 : model.pct"></i></div>
           </li>
         }
       </ul>
@@ -143,16 +143,16 @@ export class Setup {
   private progress = signal<Record<string, ModelProgress>>({});
 
   protected readonly models = computed(() => {
-    const i = this.info();
-    const p = this.progress();
+    const info = this.info();
+    const progress = this.progress();
     const row = (key: 'whisper' | 'aligner', name: string, role: string) => {
-      const got = p[key];
+      const got = progress[key];
       return {
         key,
         name,
         role,
-        ready: i.models[key] || (got != null && got.received >= got.total),
-        mb: Math.round(i.sizes[key] / MB),
+        ready: info.models[key] || (got != null && got.received >= got.total),
+        mb: Math.round(info.sizes[key] / MB),
         pct: got ? (100 * got.received) / got.total : 0,
       };
     };
@@ -167,10 +167,10 @@ export class Setup {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.engine.downloadModels((p) => this.progress.update((all) => ({ ...all, [p.model]: p })));
+      await this.engine.downloadModels((progress) => this.progress.update((all) => ({ ...all, [progress.model]: progress })));
       this.done.emit();
-    } catch (e) {
-      this.error.set(`${(e as Error).message}. Check your internet connection and try again.`);
+    } catch (error) {
+      this.error.set(`${(error as Error).message}. Check your internet connection and try again.`);
     } finally {
       this.busy.set(false);
     }

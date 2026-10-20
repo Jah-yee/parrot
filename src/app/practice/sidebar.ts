@@ -27,14 +27,14 @@ import { band } from '../shared/score';
 
     <span class="eyebrow">Your texts</span>
     <nav aria-label="Your texts">
-      @for (t of shown(); track t.id) {
-        <button [class.on]="t.id === store.text()?.id" [attr.aria-current]="t.id === store.text()?.id ? 'page' : null" (click)="store.open(t.id)">
+      @for (text of shown(); track text.id) {
+        <button [class.on]="text.id === store.text()?.id" [attr.aria-current]="text.id === store.text()?.id ? 'page' : null" (click)="store.open(text.id)">
           <span class="what">
-            <span class="t">{{ t.title }}</span>
-            <span class="m">{{ t.words }} words · {{ t.practised ? t.practised + ' practised' : 'new' }}</span>
+            <span class="t">{{ text.title }}</span>
+            <span class="m">{{ text.words }} words · {{ text.practised ? text.practised + ' practised' : 'new' }}</span>
           </span>
-          @if (t.average != null) {
-            <span class="pill" [class]="band(t.average)">{{ t.average }}%</span>
+          @if (text.average != null) {
+            <span class="pill" [class]="band(text.average)">{{ text.average }}%</span>
           }
         </button>
       }
@@ -187,8 +187,8 @@ export class Sidebar {
   protected band = band;
   protected query = signal('');
   protected readonly shown = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return this.store.texts().filter((t) => !q || t.title.toLowerCase().includes(q) || t.text.toLowerCase().includes(q));
+    const search = this.query().trim().toLowerCase();
+    return this.store.texts().filter((text) => !search || text.title.toLowerCase().includes(search) || text.text.toLowerCase().includes(search));
   });
   protected readonly status = computed(
     () => ({ checking: 'Starting…', ready: 'On-device · ready', down: 'Engine not running' })[this.store.engineState()],

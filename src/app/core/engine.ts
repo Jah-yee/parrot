@@ -44,8 +44,8 @@ export class Engine {
   private async app<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
     try {
       return await invoke<T>(cmd, args);
-    } catch (e) {
-      throw new EngineError(typeof e === 'string' ? e : String(e));
+    } catch (error) {
+      throw new EngineError(typeof error === 'string' ? error : String(error));
     }
   }
 
@@ -56,18 +56,24 @@ export class Engine {
   /** Where the data is kept and whether the speech models are ready. */
   async info(): Promise<EngineInfo> {
     if (IN_APP) {
-      const i = await this.app<EngineInfo>('info');
-      this.dataDir = i.data;
-      return i;
+      const info = await this.app<EngineInfo>('info');
+      this.dataDir = info.data;
+      return info;
     }
-    const h = await this.http<{ data: string; whisper: boolean }>('/api/health');
-    this.dataDir = h.data;
-    return { data: h.data, models: { whisper: h.whisper, aligner: true }, sizes: { whisper: 0, aligner: 0 } };
+    const health = await this.http<{ data: string; whisper: boolean }>('/api/health');
+    this.dataDir = health.data;
+    return {
+      data: health.data,
+      models: { whisper: health.whisper, aligner: true },
+      sizes: { whisper: 0, aligner: 0 },
+    };
   }
 
   /** Download the missing speech models, reporting progress. */
-  async downloadModels(onProgress: (p: ModelProgress) => void): Promise<void> {
-    const stop = await listen<ModelProgress>('model-progress', (e) => onProgress(e.payload));
+  async downloadModels(onProgress: (progress: ModelProgress) => void): Promise<void> {
+    const stop = await listen<ModelProgress>('model-progress', (event) =>
+      onProgress(event.payload),
+    );
     try {
       await this.app('download_models');
     } finally {
@@ -115,8 +121,8 @@ export class Engine {
       const bytes = new Uint8Array(await audio.arrayBuffer());
       try {
         return await invoke<Attempt>('check', bytes, { headers: { 'x-text': textId, 'x-part': encodeURIComponent(part) } });
-      } catch (e) {
-        throw new EngineError(typeof e === 'string' ? e : String(e));
+      } catch (error) {
+        throw new EngineError(typeof error === 'string' ? error : String(error));
       }
     }
     return this.http<Attempt>(`/api/check?text=${textId}&part=${encodeURIComponent(part)}`, {

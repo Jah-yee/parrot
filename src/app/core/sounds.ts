@@ -26,27 +26,42 @@ export function level(score: number | null): SoundUnit['level'] {
  * Characters that are not letters are left out.
  */
 export function soundUnits(word: string, letters: (number | null)[]): SoundUnit[] {
-  const chars = [...word].map((c, i) => ({ c, s: letters[i] ?? null })).filter((x) => /\p{L}|'/u.test(x.c) && x.c !== "'");
+  const chars = [...word]
+    .map((char, charIndex) => ({ char, score: letters[charIndex] ?? null }))
+    .filter((entry) => /\p{L}|'/u.test(entry.char) && entry.char !== "'");
   const units: { text: string; scores: (number | null)[] }[] = [];
-  const low = (k: number) => chars[k]?.c.toLowerCase() ?? '';
-  for (let k = 0; k < chars.length; ) {
-    let n = 1;
-    if (VOWEL.test(low(k))) {
-      while (VOWEL.test(low(k + n))) n++;
-      if (low(k + n) === 'g' && low(k + n + 1) === 'h') n += 2;
-      else if (/[yw]/.test(low(k + n)) && !VOWEL.test(low(k + n + 1))) n++;
-    } else if (PAIRS.has(low(k) + low(k + 1)) || (low(k) === low(k + 1) && low(k) !== '')) {
-      n = 2;
+  const low = (charIndex: number) => chars[charIndex]?.char.toLowerCase() ?? '';
+  for (let start = 0; start < chars.length; ) {
+    let size = 1;
+    if (VOWEL.test(low(start))) {
+      while (VOWEL.test(low(start + size))) size++;
+      if (low(start + size) === 'g' && low(start + size + 1) === 'h') size += 2;
+      else if (/[yw]/.test(low(start + size)) && !VOWEL.test(low(start + size + 1))) size++;
+    } else if (
+      PAIRS.has(low(start) + low(start + 1)) ||
+      (low(start) === low(start + 1) && low(start) !== '')
+    ) {
+      size = 2;
     }
     // a final e after a consonant is silent: it goes with the sound before it ("paste": p, a, s, te)
-    if (k + n === chars.length - 1 && low(k + n) === 'e' && !VOWEL.test(low(k + n - 1)) && chars.length > 2 && units.length > 0) n++;
-    const part = chars.slice(k, k + n);
-    units.push({ text: part.map((x) => x.c).join(''), scores: part.map((x) => x.s) });
-    k += n;
+    if (
+      start + size === chars.length - 1 &&
+      low(start + size) === 'e' &&
+      !VOWEL.test(low(start + size - 1)) &&
+      chars.length > 2 &&
+      units.length > 0
+    )
+      size++;
+    const part = chars.slice(start, start + size);
+    units.push({
+      text: part.map((entry) => entry.char).join(''),
+      scores: part.map((entry) => entry.score),
+    });
+    start += size;
   }
-  return units.map((u) => {
-    const known = u.scores.filter((s): s is number => s != null);
+  return units.map((unit) => {
+    const known = unit.scores.filter((letterScore): letterScore is number => letterScore != null);
     const score = known.length ? Math.max(...known) : null;
-    return { text: u.text, score, level: level(score) };
+    return { text: unit.text, score, level: level(score) };
   });
 }
