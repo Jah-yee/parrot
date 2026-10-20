@@ -39,6 +39,11 @@ testem.log
 /typings
 __screenshots__/
 
+# Agent tooling
+.claude/
+.agents/
+skills-lock.json
+
 # System files
 .DS_Store
 Thumbs.db
