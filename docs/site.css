@@ -196,6 +196,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.0
 .os-row.me .option:first-child .btn { background: var(--green); border-color: var(--green); color: var(--green-ink); }
 .os-row.me .you { display: inline-block; }
 .you { display: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); margin-left: 4px; }
+.btn.soon { opacity: 0.55; cursor: default; pointer-events: none; }
 .first-open { margin-top: 22px; display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border-radius: 14px; background: var(--cream); border: 1px solid var(--line); font-size: 14px; color: var(--ink-2); }
 .first-open > b { color: var(--ink); font-size: 15px; margin-bottom: 2px; }
 .release-note { margin-top: 18px; font-size: 14px; color: var(--muted); }

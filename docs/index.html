@@ -183,7 +183,7 @@
         </div>
         <div class="os-row" data-os="linux">
           <h3><span data-icon="linux"></span>Linux<span class="you">your system</span></h3>
-          <span class="req">64-bit, most distributions</span>
+          <span class="req">64-bit; Ubuntu 24.04, Fedora 40, Debian 13 or newer</span>
           <div class="options">
             <div class="option">
               <span class="what"><b>AppImage</b><span>Runs on most distributions</span></span>
@@ -337,6 +337,12 @@
       document.querySelectorAll('a[data-asset]').forEach(function (a) {
         var hit = (rel.assets || []).filter(function (x) { return match[a.dataset.asset](x.name); })[0];
         if (hit) a.href = hit.browser_download_url;
+        else {
+          // this release has no build for it yet (Intel Macs in 0.1.0): say so instead of sending people to the list
+          a.textContent = 'Coming soon';
+          a.removeAttribute('href');
+          a.classList.add('soon');
+        }
       });
       var first = document.querySelector('.os-row[data-os="' + os + '"] a[data-asset]');
       if (first && first.href.indexOf('/download/') > 0) document.getElementById('main-download').href = first.href;

@@ -1,4 +1,4 @@
-# Builds the installers for macOS (Apple Silicon and Intel), Windows and Linux when a version tag is pushed
+# Builds the installers for macOS (Apple Silicon), Windows and Linux when a version tag is pushed
 # (git tag v0.1.0 && git push origin v0.1.0), and attaches them to a draft release to review and publish.
 # The download page (docs/) picks the files up from the latest published release.
 name: Release
@@ -19,9 +19,8 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-          - platform: ubuntu-22.04
+          # ONNX Runtime's ready-made Linux build needs glibc 2.38+ (Ubuntu 24.04 and other 2024+ systems)
+          - platform: ubuntu-24.04
             args: ''
           - platform: windows-latest
             args: ''
@@ -30,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Linux libraries
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf cmake clang libclang-dev
@@ -42,7 +41,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
