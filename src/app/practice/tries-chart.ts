@@ -7,7 +7,7 @@ import { Store } from '../core/store';
   template: `
     <div class="head">
       <span class="eyebrow">Tries of this part</span>
-      <span class="hint">{{ store.history().length }}</span>
+      <span class="hint">{{ store.history().length > 6 ? 'last 6 of ' : '' }}{{ store.history().length }}</span>
     </div>
     <div class="bars">
       @for (t of tries(); track t.id) {
@@ -38,13 +38,16 @@ import { Store } from '../core/store';
     }
     .bars {
       flex: 1;
+      overflow: hidden;
       display: flex;
       align-items: flex-end;
       gap: 8px;
       min-height: 80px;
     }
     button {
-      flex: 1;
+      // bars share the width and may get narrow: nothing in them sets a minimum
+      flex: 1 1 0;
+      min-width: 0;
       max-width: 52px;
       display: flex;
       flex-direction: column;
@@ -72,8 +75,11 @@ import { Store } from '../core/store';
       background: var(--accent);
     }
     .time {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      max-width: 100%;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -84,13 +90,13 @@ export class TriesChart {
     const shown = this.store.result()?.id;
     return this.store
       .history()
-      .slice(0, 8)
+      .slice(0, 6)
       .reverse()
       .map((h) => ({
         id: h.id,
         score: h.score,
         on: h.id === shown,
-        h: 8 + Math.round(Math.max(0, h.score) * 0.7),
+        h: 8 + Math.round(Math.max(0, h.score) * 0.6),
         time: `${h.id.slice(9, 11)}:${h.id.slice(11, 13)}`,
         title: `${h.id.slice(6, 8)}/${h.id.slice(4, 6)} ${h.id.slice(9, 11)}:${h.id.slice(11, 13)} · ${h.wpm} words a minute`,
       }));

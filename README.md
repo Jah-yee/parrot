@@ -4,6 +4,10 @@
 
 **Read a text aloud and see which words came out wrong.**
 
+**[Download for macOS, Windows and Linux](https://qwertymuzaffar.github.io/parrot/)** · [Website](https://qwertymuzaffar.github.io/parrot/)
+
+![Parrot's practice screen](docs/practice.jpg)
+
 Parrot is a free, open-source desktop app for practising spoken English. Paste anything you need to say out loud (a job
 interview introduction, a talk, a script), listen to it read correctly, record yourself, and Parrot shows you word by
 word what came out wrong, how each word should sound, and lets you hear yours and the correct one side by side.
@@ -48,7 +52,12 @@ Texts and recordings are stored in the app's data folder (macOS:
 2. The engine in Rust inside the app: whisper.cpp through `whisper-rs`, an Apache-2.0 English wav2vec2 aligner
    through ONNX Runtime, so no Python is needed.
 3. A natural offline reference voice (Kokoro) for every text, which also makes the sound scores more exact.
-4. Installers for macOS, Windows and Linux, and the project site on GitHub Pages.
+4. Installers for macOS, Windows and Linux (built by `.github/workflows/release.yml` on a version tag).
+
+## Website
+
+The download page is `docs/`, served by GitHub Pages. Its download buttons fill themselves in from the latest
+published release, so nothing on it needs changing for a new version.
 
 ## Licence
 

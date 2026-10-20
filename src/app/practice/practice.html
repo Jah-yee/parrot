@@ -49,7 +49,7 @@
   @if (part) {
     <section class="stage">
       <div class="card sheet">
-        <p class="sentence" [class]="size()">
+        <p #sentence class="sentence" [class]="size()">
           @for (w of store.words(); track $index; let k = $index) {
             <span
               class="w"

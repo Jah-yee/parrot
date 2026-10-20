@@ -15,13 +15,14 @@ import { WordCard } from './word-card';
   templateUrl: './practice.html',
   styleUrl: './practice.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'key($event)' },
+  host: { '(document:keydown)': 'key($event)', '(window:resize)': 'fit()' },
 })
 export class Practice {
   protected store = inject(Store);
   readonly settings = output<void>();
   protected band = band;
   private stepper = viewChild<ElementRef<HTMLElement>>('stepper');
+  private sentence = viewChild<ElementRef<HTMLElement>>('sentence');
 
   protected readonly modes: { id: Mode; label: string }[] = [
     { id: 'whole', label: 'Whole text' },
@@ -51,6 +52,13 @@ export class Practice {
   });
 
   constructor() {
+    // the sentence as large as the card allows: shrink the type until it fits (long texts still scroll at 18 px)
+    effect(() => {
+      this.store.words();
+      this.size();
+      this.result();
+      queueMicrotask(() => this.fit());
+    });
     // keep the current part in view in the stepper
     effect(() => {
       const i = this.store.index();
@@ -58,6 +66,17 @@ export class Practice {
         this.stepper()?.nativeElement.children[i]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
       );
     });
+  }
+
+  protected fit() {
+    const el = this.sentence()?.nativeElement;
+    if (!el) return;
+    el.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollHeight > el.clientHeight + 1 && size > 18) {
+      size -= 1;
+      el.style.fontSize = `${size}px`;
+    }
   }
 
   protected status(k: number) {
