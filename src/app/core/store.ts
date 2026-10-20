@@ -70,6 +70,8 @@ export class Store {
     } catch (e) {
       this.engineState.set('down');
       this.fail(e);
+      // try again until the engine is up, so starting it is enough
+      setTimeout(() => this.engineState() === 'down' && this.loadTexts().then(() => this.loadActivity()), 3000);
     } finally {
       this.loaded.set(true);
     }

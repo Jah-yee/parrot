@@ -23,6 +23,8 @@ export class Sound {
   private onEnd: (() => void) | null = null;
   private synthMode = false;
   private utterance: SpeechSynthesisUtterance | null = null;
+  private synth: { text: string; rate: number; onWord?: (charIndex: number) => void; from: number; at: number } | null =
+    null;
 
   constructor() {
     const load = () => {
@@ -49,21 +51,34 @@ export class Sound {
   speak(text: string, rate = 1, track: Track | null = 'ref', onWord?: (charIndex: number) => void): Promise<void> {
     this.stop();
     return new Promise((resolve) => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.voice = this.voices().find((v) => v.name === this.voiceName()) ?? null;
-      u.lang = 'en-US';
-      u.rate = rate;
-      if (onWord) u.onboundary = (e) => e.name === 'word' && onWord(e.charIndex);
-      u.onend = u.onerror = () => {
-        // cancel() ends the previous utterance a moment later: only the current one may reset the state
-        if (this.utterance === u) this.reset();
-        resolve();
-      };
-      this.utterance = u;
+      this.synth = { text, rate, onWord, from: 0, at: 0 };
+      this.onEnd = resolve;
       this.synthMode = true;
       this.playing.set(track);
-      speechSynthesis.speak(u);
+      this.utter(0);
     });
+  }
+
+  /** Speak the reading from a character on. Pausing a voice is unreliable in browsers (some voices ignore it), so a
+   * pause stops the reading and remembers the word it reached, and resuming speaks the rest from that word. */
+  private utter(from: number) {
+    const s = this.synth!;
+    s.from = from;
+    const u = new SpeechSynthesisUtterance(s.text.slice(from));
+    u.voice = this.voices().find((v) => v.name === this.voiceName()) ?? null;
+    u.lang = 'en-US';
+    u.rate = s.rate;
+    u.onboundary = (e) => {
+      if (e.name !== 'word') return;
+      s.at = from + e.charIndex;
+      s.onWord?.(s.at);
+    };
+    u.onend = u.onerror = () => {
+      // cancel() ends the previous utterance a moment later: only the current one may finish the reading
+      if (this.utterance === u) this.ended();
+    };
+    this.utterance = u;
+    speechSynthesis.speak(u);
   }
 
   /** A whole recording (or a clip URL) with a time callback for the highlight. */
@@ -91,8 +106,14 @@ export class Sound {
   togglePause() {
     if (!this.playing()) return;
     if (this.synthMode) {
-      speechSynthesis.paused ? speechSynthesis.resume() : speechSynthesis.pause();
-      this.paused.set(speechSynthesis.paused);
+      if (this.paused()) {
+        this.paused.set(false);
+        this.utter(this.synth!.at);
+      } else {
+        this.utterance = null;
+        speechSynthesis.cancel();
+        this.paused.set(true);
+      }
     } else if (this.player.paused) {
       this.player.play().then(() => this.tick());
       this.paused.set(false);
@@ -131,6 +152,7 @@ export class Sound {
     this.onTime = this.onEnd = null;
     this.synthMode = false;
     this.utterance = null;
+    this.synth = null;
     this.playing.set(null);
     this.paused.set(false);
   }
