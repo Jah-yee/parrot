@@ -25,9 +25,9 @@
         @let s = store.scores()[p.key];
         <li>
           @if (i === store.index()) {
-            <button class="current" aria-current="step" (click)="store.select(i)">
+            <button class="current" [class]="band(s?.last) || 'none'" aria-current="step" (click)="store.select(i)">
               <span class="n">{{ p.label }}</span>
-              <span>{{ unit() }} {{ p.label }}{{ s ? ' · ' + s.last + '%' : '' }}</span>
+              <span>{{ unit() }} {{ p.label }}@if (s) { · <b class="pct">{{ s.last }}%</b>}</span>
             </button>
           } @else {
             <button (click)="store.select(i)" [title]="p.text">

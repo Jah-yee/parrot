@@ -97,11 +97,13 @@ header {
       background: var(--wrong-ink);
     }
   }
+  // the part you're on: the thick outline says "here", and the whole pill takes the score's colour
+  // (dark until the part has been practised)
   .current {
     flex-direction: row;
     gap: 8px;
     padding: 0 12px 0 5px;
-    border: 2px solid var(--accent);
+    border: 2px solid var(--ink);
     color: var(--ink);
     .n {
       min-width: 26px;
@@ -110,8 +112,32 @@ header {
       border-radius: 8px;
       display: grid;
       place-items: center;
+      background: var(--ink);
+      color: var(--surface);
+    }
+    &.good {
+      border-color: var(--accent);
+      color: var(--good-ink);
+    }
+    &.warn {
+      border-color: var(--warn-line);
+      color: var(--warn-ink);
+    }
+    &.bad {
+      border-color: var(--wrong-ink);
+      color: var(--wrong-ink);
+    }
+    &.good .n {
       background: var(--accent);
       color: var(--accent-ink);
+    }
+    &.warn .n {
+      background: var(--warn-line);
+      color: #14201a;
+    }
+    &.bad .n {
+      background: var(--wrong-ink);
+      color: var(--tag-ink);
     }
   }
   .sum {
