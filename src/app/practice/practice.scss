@@ -150,8 +150,9 @@ header {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  margin: 0;
-  padding-top: 18px;
+  // room around the words inside the scroll box, so the outline of a selected word at an edge isn't cut off
+  margin: 0 -8px;
+  padding: 18px 8px 6px;
   font-family: var(--display);
   font-size: 33px;
   font-weight: 500;
@@ -163,15 +164,16 @@ header {
   column-gap: 7px;
   row-gap: 4px;
 
+  // long texts: lines far enough apart for the "heard …" tags to sit above a word without covering the line above
   &.long {
     font-size: 22px;
     align-content: flex-start;
-    row-gap: 6px;
+    row-gap: 16px;
   }
   &.xl {
     font-size: 18px;
     align-content: flex-start;
-    row-gap: 8px;
+    row-gap: 16px;
   }
 
   .w {
@@ -202,9 +204,9 @@ header {
   }
   .tag {
     position: absolute;
-    left: 50%;
+    // from the word's left edge, not centred: centred, a tag on the first word of a line sticks out of the box
+    left: -2px;
     top: -17px;
-    transform: translateX(-50%);
     font-family: var(--font);
     font-size: 11px;
     font-weight: 700;
@@ -216,6 +218,13 @@ header {
     padding: 1px 7px;
     line-height: 1.5;
     pointer-events: none;
+    z-index: 2;
+    // a tooltip: shown for the word you point at or have selected, so neighbours' tags never overlap
+    display: none;
+  }
+  .w:hover .tag,
+  .w.sel .tag {
+    display: block;
   }
 }
 

@@ -16,14 +16,14 @@ export function applyTheme(t: Theme) {
   imports: [Icon],
   template: `
     <dialog #dialog (close)="0" (click)="backdrop($event)">
-      <div class="box">
+      <div class="box" tabindex="-1" autofocus>
         <header>
           <h2>Settings</h2>
           <button class="btn ghost icon" (click)="close()" aria-label="Close"><app-icon name="close" /></button>
         </header>
 
         <section>
-          <span class="label">Reference voice</span>
+          <span class="eyebrow">Reference voice</span>
           <p class="hint">The voice that reads your texts and single words. Voices marked “online” send the text (never your recordings) to the provider.</p>
           <div class="row">
             <select class="field" [value]="sound.voiceName()" (change)="sound.setVoice($any($event.target).value)">
@@ -36,7 +36,7 @@ export function applyTheme(t: Theme) {
         </section>
 
         <section>
-          <span class="label">Appearance</span>
+          <span class="eyebrow">Appearance</span>
           <div class="seg">
             @for (t of themes; track t) {
               <button [class.on]="theme() === t" (click)="setTheme(t)">{{ t[0].toUpperCase() + t.slice(1) }}</button>
@@ -45,7 +45,7 @@ export function applyTheme(t: Theme) {
         </section>
 
         <section>
-          <span class="label">Speech engine</span>
+          <span class="eyebrow">Speech engine</span>
           @if (health.value(); as h) {
             <p class="ok"><span class="dot"></span> Running{{ h.whisper ? '' : ', downloading the speech model…' }}</p>
             <p class="hint">Texts and recordings are kept on this computer, in<br /><code>{{ h.data }}</code></p>
@@ -71,6 +71,7 @@ export function applyTheme(t: Theme) {
     }
     .box {
       padding: 18px 22px 22px;
+      outline: none;
     }
     header {
       display: flex;
@@ -83,11 +84,22 @@ export function applyTheme(t: Theme) {
     }
     section {
       margin-top: 18px;
+      > .eyebrow {
+        display: block;
+      }
     }
     .row {
       display: flex;
       gap: 8px;
       margin-top: 8px;
+      // the menu and the button side by side: one height (the button's, a comfortable click target)
+      > * {
+        height: 44px;
+      }
+      select {
+        flex: 1;
+        min-width: 0;
+      }
     }
     .seg {
       margin-top: 8px;
