@@ -4,11 +4,14 @@ import { Store } from '../core/store';
 import { Icon } from '../shared/icon';
 import { band } from '../shared/score';
 import { ScoreRing } from './score-ring';
-import { WordInspector } from './word-inspector';
+import { Sidebar } from './sidebar';
+import { TriesChart } from './tries-chart';
+import { Waveform } from './waveform';
+import { WordCard } from './word-card';
 
 @Component({
   selector: 'app-practice',
-  imports: [Icon, ScoreRing, WordInspector],
+  imports: [Icon, ScoreRing, Sidebar, TriesChart, Waveform, WordCard],
   templateUrl: './practice.html',
   styleUrl: './practice.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,27 +21,42 @@ export class Practice {
   protected store = inject(Store);
   readonly settings = output<void>();
   protected band = band;
-  private list = viewChild<ElementRef<HTMLElement>>('list');
+  private stepper = viewChild<ElementRef<HTMLElement>>('stepper');
 
   protected readonly modes: { id: Mode; label: string }[] = [
     { id: 'whole', label: 'Whole text' },
     { id: 'sentences', label: 'Sentences' },
     { id: 'short', label: 'Short parts' },
   ];
-  protected readonly rates = [0.6, 0.75, 0.9, 1];
+  protected readonly rates = [0.6, 0.75, 1];
 
-  protected readonly result = this.store.result;
+  protected readonly recording = this.store.recorder.recording;
+  /** the try shown, unless a new one is being recorded */
+  protected readonly result = computed(() => (this.recording() ? null : this.store.result()));
   protected readonly counts = computed(() => {
     const w = this.result()?.words ?? [];
     return { wrong: w.filter((x) => x.status === 'wrong').length, unclear: w.filter((x) => x.status === 'unclear').length };
   });
-  protected readonly long = computed(() => this.store.words().length > 40);
+  protected readonly delta = computed(() => {
+    const r = this.result();
+    const p = this.store.previousScore();
+    return r && p != null ? r.score - p : null;
+  });
+  protected readonly unit = computed(
+    () => ({ whole: 'Text', sentences: 'Sentence', short: 'Part' })[this.store.text()?.mode ?? 'sentences'],
+  );
+  protected readonly size = computed(() => {
+    const n = this.store.words().length;
+    return n > 120 ? 'xl' : n > 45 ? 'long' : '';
+  });
 
   constructor() {
-    // keep the current part visible in the list
+    // keep the current part in view in the stepper
     effect(() => {
       const i = this.store.index();
-      queueMicrotask(() => this.list()?.nativeElement.children[i]?.scrollIntoView({ block: 'nearest' }));
+      queueMicrotask(() =>
+        this.stepper()?.nativeElement.children[i]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
+      );
     });
   }
 
@@ -46,26 +64,20 @@ export class Practice {
     return this.result()?.words[k]?.status ?? '';
   }
 
+  protected heard(k: number) {
+    const w = this.result()?.words[k];
+    return w?.status === 'wrong' ? (w.heard ? `heard “${w.heard}”` : 'not heard') : '';
+  }
+
   protected wordClick(k: number) {
     this.store.selectWord(k);
-    if (this.result()?.words[k]?.t && this.result()!.words[k].status !== 'good') this.store.compareWord(k);
+    const w = this.result()?.words[k];
+    if (w?.t && w.status !== 'good') this.store.compareWord(k);
     else this.store.sayWord(k);
   }
 
-  protected time(id: string) {
-    return `${id.slice(9, 11)}:${id.slice(11, 13)}`;
-  }
-
-  protected day(id: string) {
-    const d = new Date(+id.slice(0, 4), +id.slice(4, 6) - 1, +id.slice(6, 8));
-    const today = new Date();
-    return d.toDateString() === today.toDateString()
-      ? 'today'
-      : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-  }
-
-  protected wpmNote(wpm: number) {
-    return wpm < 120 ? 'a bit slow' : wpm > 175 ? 'a bit fast' : 'natural pace';
+  protected pace(wpm: number) {
+    return wpm < 120 ? 'slow · aim 140–165' : wpm < 140 ? 'a little slow · aim 140–165' : wpm > 175 ? 'fast · aim 140–165' : 'a natural pace';
   }
 
   protected key(e: KeyboardEvent) {

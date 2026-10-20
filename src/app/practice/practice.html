@@ -1,167 +1,210 @@
 @let text = store.text();
 @let part = store.part();
 @let progress = store.progress();
+@let r = result();
 
-<header class="bar">
-  <button class="btn ghost" (click)="store.library()"><app-icon name="back" [size]="16" /> Library</button>
-  <div class="title" [title]="text?.title">{{ text?.title }}</div>
-  <div class="seg">
-    @for (m of modes; track m.id) {
-      <button [class.on]="text?.mode === m.id" (click)="store.setMode(m.id)">{{ m.label }}</button>
-    }
-  </div>
-  <div class="grow"></div>
-  <div class="progress" [title]="progress.done + ' of ' + progress.total + ' parts recorded'">
-    <div class="track"><i [style.width.%]="progress.total ? (100 * progress.done) / progress.total : 0"></i></div>
-    <span>{{ progress.done }}/{{ progress.total }}</span>
-    @if (progress.avg != null) {
-      <span class="badge" [class]="band(progress.avg)">avg {{ progress.avg }}%</span>
-    }
-  </div>
-  <button class="btn ghost icon" (click)="settings.emit()" title="Settings" aria-label="Settings"><app-icon name="settings" /></button>
-</header>
+<app-sidebar (settings)="settings.emit()" />
 
-<div class="body">
-  <aside class="parts">
-    <ol #list>
+<!-- centre: the part -->
+<main>
+  <header>
+    <div class="title">
+      <span class="meta">{{ text?.words }} words · {{ progress.total }} {{ unit().toLowerCase() }}{{ progress.total === 1 ? '' : 's' }}</span>
+      <h1 [title]="text?.title">{{ text?.title }}</h1>
+    </div>
+    <div class="seg" role="group" aria-label="Practise as">
+      @for (m of modes; track m.id) {
+        <button [class.on]="text?.mode === m.id" [attr.aria-pressed]="text?.mode === m.id" (click)="store.setMode(m.id)">{{ m.label }}</button>
+      }
+    </div>
+  </header>
+
+  <nav class="steps" aria-label="Parts">
+    <ol #stepper>
       @for (p of store.parts(); track p.key + $index; let i = $index) {
         @let s = store.scores()[p.key];
-        <li [class.on]="i === store.index()" [class.sub]="p.sub" (click)="store.select(i)">
-          <span class="n">{{ p.label }}</span>
-          <span class="t">{{ p.text }}</span>
-          @if (s) {
-            <span class="badge" [class]="band(s.last)">{{ s.last }}</span>
+        <li>
+          @if (i === store.index()) {
+            <button class="current" aria-current="step" (click)="store.select(i)">
+              <span class="n">{{ p.label }}</span>
+              <span>{{ unit() }} {{ p.label }}{{ s ? ' · ' + s.last + '%' : '' }}</span>
+            </button>
+          } @else {
+            <button (click)="store.select(i)" [title]="p.text">
+              <span>{{ p.label }}</span>
+              <span class="bar" [class]="band(s?.last) || 'none'"></span>
+            </button>
           }
         </li>
       }
     </ol>
-  </aside>
+    <span class="sum">
+      {{ progress.done }} of {{ progress.total }} practised
+      @if (progress.avg != null) {
+        · <b>avg {{ progress.avg }}%</b>
+      }
+    </span>
+  </nav>
 
-  <main class="stage">
-    @if (part) {
-      <div class="where">
-        <button class="btn ghost icon" (click)="store.previous()" [disabled]="store.index() === 0" title="Previous (↑)"><app-icon name="left" /></button>
-        <span class="label">Part {{ part.label }} · {{ store.index() + 1 }} of {{ store.parts().length }}</span>
-        <button class="btn ghost icon" (click)="store.next()" [disabled]="store.index() === store.parts().length - 1" title="Next (↓)"><app-icon name="right" /></button>
-      </div>
+  @if (part) {
+    <section class="stage">
+      <div class="card sheet">
+        <p class="sentence" [class]="size()">
+          @for (w of store.words(); track $index; let k = $index) {
+            <span
+              class="w"
+              [class]="status(k)"
+              [class.now]="store.nowRef() === k || store.nowMine() === k"
+              [class.sel]="store.selected() === k && !recording()"
+              (click)="wordClick(k)"
+              >{{ w }}@if (heard(k); as h) {<span class="tag">{{ h }}</span>}</span
+            >
+          }
+        </p>
 
-      <div class="sentence" [class.long]="long()" [class.scored]="!!result()">
-        @for (w of store.words(); track $index; let k = $index) {
-          <span
-            class="w"
-            [class]="status(k)"
-            [class.now]="store.nowRef() === k || store.nowMine() === k"
-            [class.sel]="store.selected() === k"
-            (click)="wordClick(k)"
-            >{{ w }}</span
-          >{{ ' ' }}
-        }
-      </div>
-
-      <div class="controls">
-        <div class="side left">
-          <button class="btn" (click)="store.toggleReference()" title="Listen (Space)">
-            <app-icon [name]="store.sound.playing() === 'ref' && !store.sound.paused() ? 'pause' : 'play'" [size]="16" />
-            Listen
-          </button>
-          <div class="seg rates" title="Speed of the reading">
-            @for (r of rates; track r) {
-              <button [class.on]="store.rate() === r" (click)="store.setRate(r)">{{ r }}×</button>
+        <div class="take">
+          <div class="caption">
+            @if (recording()) {
+              <span class="rec-dot"></span>
+              <b class="rec">Recording</b>
+              <span class="time">{{ store.recorder.elapsed().toFixed(1) }} s</span>
+              <span>· read it aloud, then press R</span>
+            } @else if (store.checking()) {
+              <span class="spinner"></span>
+              <span>Listening to your take…</span>
+            } @else if (r) {
+              <b>Your take</b>
+              <span>· {{ r.duration.toFixed(1) }} s · try {{ store.history().length }}</span>
+              <span class="grow"></span>
+              <span class="key"><i class="k-wrong"></i>misheard</span>
+              <span class="key"><i class="k-warn"></i>sounded off</span>
+            } @else if (store.error()) {
+              <span class="error">{{ store.error() }}</span>
+            } @else {
+              <span>Your take appears here. Listen first, then press the red button and read it aloud.</span>
             }
           </div>
-        </div>
-
-        <button
-          class="record"
-          [class.on]="store.recorder.recording()"
-          [disabled]="store.checking()"
-          (click)="store.toggleRecord()"
-          [title]="store.recorder.recording() ? 'Stop (R)' : 'Record (R)'"
-          [attr.aria-label]="store.recorder.recording() ? 'Stop recording' : 'Record'"
-        >
-          <app-icon [name]="store.recorder.recording() ? 'stop' : 'mic'" [size]="30" />
-        </button>
-
-        <div class="side right">
-          <button class="btn" [disabled]="!result()" (click)="store.toggleMine()" title="Your recording (M)">
-            <app-icon [name]="store.sound.playing() === 'mine' && !store.sound.paused() ? 'pause' : 'play'" [size]="16" />
-            Mine
-          </button>
-          <button class="btn" [disabled]="!result()" (click)="store.compare()" title="Your recording, then the reference">
-            <app-icon name="swap" [size]="16" /> Compare
-          </button>
-          @if (store.sound.playing()) {
-            <button class="btn ghost icon" (click)="store.stop()" title="Stop (Esc)"><app-icon name="stop" [size]="16" /></button>
-          }
+          <app-waveform
+            [bars]="store.bars"
+            [peaks]="r ? store.peaks() : null"
+            [words]="r?.words ?? []"
+            [duration]="r?.duration ?? 0"
+            [now]="store.nowMine()"
+            [live]="recording() ? store.recorder.trace() : null"
+          />
         </div>
       </div>
 
-      <div class="status">
-        @if (store.recorder.recording()) {
-          <span class="dot"></span>
-          <span class="time">{{ store.recorder.elapsed().toFixed(1) }} s</span>
-          <span class="meter"><i [style.width.%]="store.recorder.level() * 100"></i></span>
-          <span>Read it aloud, then press <kbd>R</kbd> or the button to stop.</span>
-        } @else if (store.checking()) {
-          <span class="spinner"></span> Listening to your recording…
-        } @else if (store.error()) {
-          <span class="error">{{ store.error() }}</span>
-        } @else if (!result()) {
-          <span>Listen first, then press the red button and read the part aloud.</span>
-        }
-      </div>
-
-      @if (result(); as r) {
-        <div class="panels">
-          <section class="card summary">
-            <div class="head">
-              <app-score-ring [score]="r.score" />
-              <div class="stats">
-                <div>
-                  <b>{{ r.wpm }}</b> words a minute <span class="muted">· {{ wpmNote(r.wpm) }}</span>
-                </div>
-                <div>
-                  <b class="bad">{{ counts().wrong }}</b> misheard · <b class="warn">{{ counts().unclear }}</b> sounded off
-                </div>
-                <div class="muted">{{ r.duration.toFixed(1) }} s recorded</div>
-              </div>
-            </div>
-            <div class="heard">
-              <span class="label">Speech recognition heard</span>
-              <p>{{ r.heard || '(nothing)' }}</p>
-            </div>
-            @if (store.history().length > 1) {
-              <div class="history">
-                <span class="label">Tries</span>
-                <div class="chips">
-                  @for (h of store.history(); track h.id) {
-                    <button class="chip" [class.on]="h.id === r.id" (click)="store.showAttempt(h.id)" [title]="day(h.id) + ' ' + time(h.id)">
-                      <span class="badge" [class]="band(h.score)">{{ h.score }}%</span>
-                      <span class="muted">{{ time(h.id) }}</span>
-                    </button>
-                  }
-                </div>
-              </div>
-            }
-          </section>
-
-          <app-word-inspector class="card" />
-        </div>
-      } @else if (store.selected() != null) {
-        <div class="panels single">
-          <app-word-inspector class="card" />
+      @if (r) {
+        <div class="heard-line">
+          <span class="eyebrow">Heard</span>
+          <span class="txt" [title]="r.heard">{{ r.heard || '(nothing)' }}</span>
         </div>
       }
-    }
-  </main>
-</div>
+    </section>
+  }
 
-<footer class="keys">
-  <span><kbd>Space</kbd> listen</span>
-  <span><kbd>R</kbd> record</span>
-  <span><kbd>M</kbd> mine</span>
-  <span><kbd>↑</kbd><kbd>↓</kbd> part</span>
-  <span><kbd>Esc</kbd> stop</span>
-  <span class="grow"></span>
-  <span>Click any word to hear it</span>
-</footer>
+  <footer class="dock">
+    <div class="side before">
+      <button class="btn" (click)="store.toggleReference()" title="Listen (Space)">
+        <app-icon [name]="store.sound.playing() === 'ref' && !store.sound.paused() ? 'pause' : 'play'" [size]="15" />
+        Listen
+      </button>
+      <div class="seg rates" role="group" aria-label="Speed">
+        @for (x of rates; track x) {
+          <button [class.on]="store.rate() === x" [attr.aria-pressed]="store.rate() === x" (click)="store.setRate(x)">{{ x }}×</button>
+        }
+      </div>
+    </div>
+
+    <button
+      class="record"
+      [class.on]="recording()"
+      [disabled]="store.checking() || !part"
+      (click)="store.toggleRecord()"
+      [attr.aria-label]="recording() ? 'Stop recording (R)' : 'Record (R)'"
+      [title]="recording() ? 'Stop (R)' : 'Record (R)'"
+    >
+      <app-icon [name]="recording() ? 'stop' : 'mic'" [size]="recording() ? 24 : 28" />
+    </button>
+
+    <div class="side after">
+      <button class="btn" [disabled]="!r" (click)="store.toggleMine()" title="Your take (M)">
+        <app-icon [name]="store.sound.playing() === 'mine' && !store.sound.paused() ? 'pause' : 'play'" [size]="15" />
+        Mine
+      </button>
+      <button class="btn" [disabled]="!r" (click)="store.compare()" title="Your take, then the reference">
+        <app-icon name="swap" [size]="16" /> Mine, then correct
+      </button>
+      @if (store.sound.playing()) {
+        <button class="btn ghost square" (click)="store.stop()" aria-label="Stop (Esc)"><app-icon name="stop" [size]="15" /></button>
+      }
+    </div>
+  </footer>
+</main>
+
+<!-- right: score, word, tries -->
+<aside class="right">
+  @if (recording()) {
+    <section class="card tips">
+      <span class="eyebrow">While you read</span>
+      <div class="tip"><span class="num">1</span><span>Keep the same distance from the microphone every time.</span></div>
+      <div class="tip"><span class="num">2</span><span>Keep going if you slip. Parrot marks the words, not the pauses.</span></div>
+      @if (store.troubleWords().length) {
+        <div class="tip">
+          <span class="num">3</span>
+          <span>Last time <b>{{ store.troubleWords().slice(0, 2).join(', ') }}</b> {{ store.troubleWords().length > 1 ? 'were' : 'was' }} misheard. Say {{ store.troubleWords().length > 1 ? 'them' : 'it' }} slowly.</span>
+        </div>
+      } @else {
+        <div class="tip"><span class="num">3</span><span>Read at your interview pace, not slower.</span></div>
+      }
+    </section>
+    <section class="card level">
+      <span class="eyebrow">Input level</span>
+      <div class="meter"><i [style.width.%]="store.recorder.level() * 100"></i></div>
+      <span class="hint">{{ store.recorder.device() || 'Microphone' }}</span>
+    </section>
+  } @else {
+    @if (r) {
+      <section class="card score" aria-label="Score">
+        <app-score-ring [score]="r.score" />
+        <div class="stats">
+          <span><b class="big">{{ r.wpm }}</b> words a minute</span>
+          <span class="hint">{{ pace(r.wpm) }}</span>
+          <span><b class="bad">{{ counts().wrong }}</b> misheard · <b class="warn">{{ counts().unclear }}</b> sounded off</span>
+          @if (delta(); as d) {
+            <span class="delta" [class.down]="d < 0">{{ d > 0 ? '+' : '' }}{{ d }} since the try before</span>
+          }
+        </div>
+      </section>
+    }
+
+    @if (store.selected() != null) {
+      <app-word-card class="card" />
+    } @else if (r) {
+      <section class="card hint-card">
+        <app-icon name="ear" [size]="24" />
+        <span>Click any word to see how it sounds and to hear yours next to the correct one.</span>
+      </section>
+    } @else {
+      <section class="card start">
+        <span class="eyebrow">How it works</span>
+        <div class="tip"><span class="num">1</span><span><b>Listen</b> to the part (Space). Slow it down if you need to.</span></div>
+        <div class="tip"><span class="num">2</span><span><b>Record</b> yourself reading it (R), and press R again when you finish.</span></div>
+        <div class="tip"><span class="num">3</span><span>See which words came out <b class="bad">misheard</b> or <b class="warn">sounded off</b>, and click them to practise.</span></div>
+      </section>
+    }
+
+    @if (store.history().length) {
+      <app-tries-chart class="card tries" />
+    }
+  }
+
+  <div class="keys">
+    <span><kbd>Space</kbd> listen</span>
+    <span><kbd>R</kbd> record</span>
+    <span><kbd>M</kbd> mine</span>
+    <span><kbd>↑ ↓</kbd> {{ unit().toLowerCase() }}</span>
+    <span><kbd>Esc</kbd> stop</span>
+  </div>
+</aside>

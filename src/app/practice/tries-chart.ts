@@ -1,0 +1,98 @@
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Store } from '../core/store';
+
+/** Every try of the part as a bar, oldest first; click one to see it. */
+@Component({
+  selector: 'app-tries-chart',
+  template: `
+    <div class="head">
+      <span class="eyebrow">Tries of this part</span>
+      <span class="hint">{{ store.history().length }}</span>
+    </div>
+    <div class="bars">
+      @for (t of tries(); track t.id) {
+        <button type="button" [class.on]="t.on" (click)="store.showAttempt(t.id)" [title]="t.title">
+          <b>{{ t.score }}</b>
+          <span class="bar" [style.height.px]="t.h"></span>
+          <span class="time">{{ t.time }}</span>
+        </button>
+      }
+    </div>
+  `,
+  styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px 18px;
+      min-height: 0;
+    }
+    .head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .bars {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      min-height: 80px;
+    }
+    button {
+      flex: 1;
+      max-width: 52px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--ink-2);
+    }
+    b {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .bar {
+      width: 100%;
+      max-width: 38px;
+      border-radius: 8px 8px 4px 4px;
+      background: var(--bar);
+      transition: height 0.3s;
+    }
+    .on .bar {
+      background: var(--accent);
+    }
+    .time {
+      font-size: 11px;
+      color: var(--muted);
+    }
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TriesChart {
+  protected store = inject(Store);
+  protected readonly tries = computed(() => {
+    const shown = this.store.result()?.id;
+    return this.store
+      .history()
+      .slice(0, 8)
+      .reverse()
+      .map((h) => ({
+        id: h.id,
+        score: h.score,
+        on: h.id === shown,
+        h: 8 + Math.round(Math.max(0, h.score) * 0.7),
+        time: `${h.id.slice(9, 11)}:${h.id.slice(11, 13)}`,
+        title: `${h.id.slice(6, 8)}/${h.id.slice(4, 6)} ${h.id.slice(9, 11)}:${h.id.slice(11, 13)} · ${h.wpm} words a minute`,
+      }));
+  });
+}

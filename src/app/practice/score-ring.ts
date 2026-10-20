@@ -5,11 +5,11 @@ import { band } from '../shared/score';
 @Component({
   selector: 'app-score-ring',
   template: `
-    <svg viewBox="0 0 64 64" [class]="tone()">
+    <svg viewBox="0 0 64 64" [class]="tone()" role="img" [attr.aria-label]="score() + ' percent of words clear'">
       <circle cx="32" cy="32" r="27" class="track" />
       <circle cx="32" cy="32" r="27" class="value" [attr.stroke-dasharray]="dash()" />
     </svg>
-    <div class="num">
+    <div class="num" aria-hidden="true">
       <b>{{ score() }}<small>%</small></b>
       <span>clear</span>
     </div>
@@ -28,7 +28,7 @@ import { band } from '../shared/score';
     }
     circle {
       fill: none;
-      stroke-width: 6;
+      stroke-width: 7;
     }
     .track {
       stroke: var(--surface-2);
@@ -38,13 +38,13 @@ import { band } from '../shared/score';
       transition: stroke-dasharray 0.5s;
     }
     .good .value {
-      stroke: var(--good);
+      stroke: var(--accent);
     }
     .warn .value {
-      stroke: var(--warn);
+      stroke: var(--warn-line);
     }
     .bad .value {
-      stroke: var(--bad);
+      stroke: var(--wrong-ink);
     }
     .num {
       position: absolute;
@@ -52,14 +52,16 @@ import { band } from '../shared/score';
       display: grid;
       place-content: center;
       text-align: center;
-      line-height: 1.1;
+      line-height: 1.05;
     }
     b {
-      font-size: 22px;
+      font-family: var(--display);
+      font-size: 24px;
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
     small {
-      font-size: 12px;
+      font-size: 13px;
     }
     span {
       font-size: 11px;

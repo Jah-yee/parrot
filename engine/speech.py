@@ -51,6 +51,20 @@ def duration(path):
                                 capture_output=True, text=True).stdout or 0)
 
 
+def peaks(path, n=92):
+    """The loudest sample of each of n equal slices of a recording, scaled so the loudest slice is 1."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
+                         capture_output=True, check=True).stdout
+    a = np.abs(np.frombuffer(raw, dtype=np.int16).astype(np.float32))
+    if not len(a):
+        return []
+    slices = np.array_split(a, n)
+    p = np.array([s.max() if len(s) else 0 for s in slices])
+    top = p.max() or 1
+    return [round(float(v / top), 3) for v in p]
+
+
 def align(wav16, txt):
     """[{"t": [start, end] or None, "score": 0-1 or None}] for every whitespace-separated word of txt."""
     import torch

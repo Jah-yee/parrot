@@ -1,6 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Engine, EngineError } from './engine';
-import { Attempt, AttemptSummary, Mode, Part, PartScore, TextItem } from './models';
+import { Activity, Attempt, AttemptSummary, Mode, Part, PartScore, TextItem } from './models';
 import { Recorder } from './recorder';
 import { readSetting, writeSetting } from './settings';
 import { Sound } from './sound';
@@ -13,7 +13,9 @@ export class Store {
   readonly sound = inject(Sound);
   readonly recorder = inject(Recorder);
 
-  readonly view = signal<'library' | 'practice'>('library');
+  readonly view = signal<'home' | 'practice'>('home');
+  readonly engineState = signal<'checking' | 'ready' | 'down'>('checking');
+  readonly activity = signal<Activity | null>(null);
   readonly texts = signal<TextItem[]>([]);
   readonly loaded = signal(false);
   readonly error = signal<string | null>(null);
@@ -31,6 +33,9 @@ export class Store {
   readonly nowRef = signal<number | null>(null);
   readonly nowMine = signal<number | null>(null);
   readonly rate = signal(Number(readSetting('rate', '1')));
+  /** the loudness of the shown try, for the waveform (null while loading) */
+  readonly peaks = signal<number[] | null>(null);
+  readonly bars = 92;
 
   readonly part = computed(() => this.parts()[this.index()] ?? null);
   readonly words = computed(() => this.part()?.text.split(' ') ?? []);
@@ -42,21 +47,40 @@ export class Store {
     return { total: parts.length, done: done.length, avg };
   });
 
+  /** the score of the try before the one shown */
+  readonly previousScore = computed(() => {
+    const r = this.result();
+    const h = this.history();
+    const i = h.findIndex((x) => x.id === r?.id);
+    return i >= 0 && i + 1 < h.length ? h[i + 1].score : null;
+  });
+  /** words of the shown try that came out wrong, for the reading tips */
+  readonly troubleWords = computed(() =>
+    (this.result()?.words ?? []).filter((w) => w.status === 'wrong').map((w) => bare(w.w)),
+  );
+
   /** every play chain (mine, then the reference) checks this, so Stop really stops it */
   private run = 0;
 
   async loadTexts() {
     try {
       this.texts.set(await this.engine.texts());
+      this.engineState.set('ready');
       this.error.set(null);
     } catch (e) {
+      this.engineState.set('down');
       this.fail(e);
     } finally {
       this.loaded.set(true);
     }
   }
 
-  async open(id: string) {
+  async loadActivity() {
+    this.activity.set(await this.engine.activity().catch(() => null));
+  }
+
+  /** Open a text at a part: the given one, else where it was left. */
+  async open(id: string, index?: number) {
     const t = this.texts().find((x) => x.id === id);
     if (!t) return;
     this.stop();
@@ -64,13 +88,14 @@ export class Store {
     this.view.set('practice');
     writeSetting('text', id);
     this.engine.updateText(id, { opened: true }).catch(() => {});
-    await this.build(t.mode, readSetting(`part:${id}:${t.mode}`, '0'));
+    await this.build(t.mode, index != null ? String(index) : readSetting(`part:${id}:${t.mode}`, '0'));
   }
 
-  library() {
+  home() {
     this.stop();
-    this.view.set('library');
+    this.view.set('home');
     this.loadTexts();
+    this.loadActivity();
   }
 
   async add(text: string, title: string, mode: Mode) {
@@ -131,7 +156,17 @@ export class Store {
     const history = await this.engine.attempts(t.id, p.text);
     if (this.part() !== p || !history.length) return;
     this.history.set(history);
-    this.result.set(await this.engine.attempt(t.id, p.text, history[0].id));
+    this.show(await this.engine.attempt(t.id, p.text, history[0].id));
+  }
+
+  /** Show a try, and load its waveform. */
+  private show(r: Attempt) {
+    this.result.set(r);
+    this.peaks.set(null);
+    this.engine
+      .peaks(r.audio, this.bars)
+      .then((p) => this.result() === r && this.peaks.set(p))
+      .catch(() => {});
   }
 
   next() {
@@ -147,7 +182,7 @@ export class Store {
     const p = this.part();
     if (!t || !p) return;
     this.stop();
-    this.result.set(await this.engine.attempt(t.id, p.text, id));
+    this.show(await this.engine.attempt(t.id, p.text, id));
   }
 
   setRate(r: number) {
@@ -273,9 +308,10 @@ export class Store {
         ...s,
         [p.key]: { last: r.score, best: Math.max(r.score, s[p.key]?.best ?? 0), tries: (s[p.key]?.tries ?? 0) + 1 },
       }));
+      this.loadTexts();
       if (this.part() !== p) return;
-      this.result.set(r);
       this.history.set(await this.engine.attempts(t.id, p.text));
+      this.show(r);
       const first = r.words.findIndex((w) => w.status !== 'good');
       this.selected.set(first >= 0 ? first : null);
       this.error.set(null);

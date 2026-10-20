@@ -1,0 +1,164 @@
+<header class="top">
+  <app-logo [size]="36" />
+  <span class="name">Parrot</span>
+  <span class="grow"></span>
+  <label class="search">
+    <app-icon name="search" [size]="15" />
+    <span class="sr-only">Search your texts</span>
+    <input placeholder="Search your texts" [value]="query()" (input)="query.set($any($event.target).value)" />
+  </label>
+  <button class="btn square" (click)="settings.emit()" aria-label="Settings"><app-icon name="settings" [size]="17" /></button>
+</header>
+
+<div class="body">
+  <!-- left: a new text, and this week -->
+  <div class="left">
+    <section class="card compose" aria-label="New text">
+      <h2>What do you need to say?</h2>
+      <label for="title">Title</label>
+      <input
+        id="title"
+        class="field title"
+        placeholder="e.g. Interview: about me"
+        [value]="draftTitle()"
+        (input)="draftTitle.set($any($event.target).value)"
+      />
+      <label for="body">Text</label>
+      <textarea
+        id="body"
+        placeholder="Paste anything you need to say out loud: an introduction, a talk, a script…"
+        [value]="draft()"
+        (input)="draft.set($any($event.target).value)"
+      ></textarea>
+      <div class="as">
+        <span class="lbl">Practise it as</span>
+        <div class="modes" role="group" aria-label="Practise as">
+          @for (m of modes; track m.id) {
+            <button type="button" [class.on]="draftMode() === m.id" [attr.aria-pressed]="draftMode() === m.id" (click)="draftMode.set(m.id)">
+              <b>{{ m.label }}</b>
+              <span>{{ words() ? m.unit(counts()[m.id]) : m.id === 'whole' ? 'in one go' : m.id === 'sentences' ? 'one at a time' : 'cut at commas' }}</span>
+            </button>
+          }
+        </div>
+      </div>
+      <div class="go">
+        <span class="hint">
+          @if (words()) {
+            {{ words() }} words · about {{ words() < 150 ? Math.max(5, Math.round((words() / 150) * 60)) + ' s' : Math.round(words() / 150) + ' min' }} to read
+          } @else {
+            Parrot reads it to you, then listens to you.
+          }
+        </span>
+        <button class="btn primary" [disabled]="!words()" (click)="start()">Start practising</button>
+      </div>
+    </section>
+
+    <section class="card week" aria-label="This week">
+      <div class="head">
+        <span class="eyebrow">This week</span>
+        @if (store.activity(); as a) {
+          <span class="hint">{{ a.tries }} {{ a.tries === 1 ? 'try' : 'tries' }}{{ a.average != null ? ' · avg ' + a.average + '%' : '' }}</span>
+        }
+      </div>
+      <div class="bars">
+        @for (d of week(); track d.day) {
+          <div class="day" [title]="d.tries + ' tries'">
+            <span class="bar" [class]="d.tone" [style.height.px]="d.h"></span>
+            <span class="lbl">{{ d.day }}</span>
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+
+  <!-- right: your texts -->
+  <div class="right">
+    <div class="heading">
+      <h1>Your texts</h1>
+      @if (store.texts().length) {
+        <span class="hint">{{ store.texts().length }} {{ store.texts().length === 1 ? 'text' : 'texts' }} · {{ practisedParts() }} parts practised</span>
+      }
+    </div>
+
+    @if (store.engineState() === 'down') {
+      <div class="card down">
+        <b>The speech engine isn't running.</b>
+        <span>Start it with <code>python engine/server.py</code>, then reopen Parrot.</span>
+      </div>
+    }
+
+    @if (resume(); as c) {
+      @let r = ring(c);
+      <button class="resume" (click)="continue(c)">
+        <span class="ring">
+          <svg width="58" height="58" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="27" class="track" />
+            <circle cx="32" cy="32" r="27" class="value" [attr.stroke-dasharray]="r.dash" />
+          </svg>
+          <span>{{ r.done }}/{{ r.total }}</span>
+        </span>
+        <span class="what">
+          <span class="kicker">Continue where you left off</span>
+          <span class="t">{{ c.t.title }}</span>
+          @if (c.next) {
+            <span class="next">Next: “{{ c.next.text }}”</span>
+          }
+        </span>
+        <span class="cta"><app-icon name="play" [size]="14" /> Continue</span>
+      </button>
+    }
+
+    <ul class="grid">
+      @for (c of shown(); track c.t.id) {
+        <li class="card text" (click)="renaming() !== c.t.id && confirming() !== c.t.id && store.open(c.t.id)">
+          <div class="row">
+            @if (renaming() === c.t.id) {
+              <input
+                class="field"
+                [value]="c.t.title"
+                (click)="$event.stopPropagation()"
+                (keydown.enter)="rename(c.t, $any($event.target).value)"
+                (keydown.escape)="renaming.set(null)"
+                (blur)="rename(c.t, $any($event.target).value)"
+                aria-label="Title"
+                autofocus
+              />
+            } @else {
+              <h3>{{ c.t.title }}</h3>
+            }
+            <span class="pill" [class]="band(c.t.average) || 'none'">{{ c.t.average != null ? c.t.average + '%' : 'new' }}</span>
+          </div>
+          <p>{{ c.t.text }}</p>
+          <div class="cells" aria-hidden="true">
+            @for (cell of c.cells; track $index) {
+              <span [class]="cell"></span>
+            }
+          </div>
+          <div class="meta">
+            <span>{{ c.t.words }} words · {{ modeName(c.t.mode) }} · {{ when(c.t.opened ?? c.t.created) }}</span>
+            <span class="acts" (click)="$event.stopPropagation()">
+              @if (confirming() === c.t.id) {
+                <span class="ask">Delete it and its recordings?</span>
+                <button class="btn ghost small" (click)="confirming.set(null)">Keep</button>
+                <button class="btn danger small" (click)="remove(c.t)">Delete</button>
+              } @else {
+                <button class="btn ghost small icon" (click)="renaming.set(c.t.id)" aria-label="Rename"><app-icon name="edit" [size]="15" /></button>
+                <button class="btn ghost small icon" (click)="confirming.set(c.t.id)" aria-label="Delete"><app-icon name="trash" [size]="15" /></button>
+              }
+            </span>
+          </div>
+        </li>
+      } @empty {
+        @if (query()) {
+          <li class="empty">No text matches “{{ query() }}”.</li>
+        } @else if (store.loaded() && store.engineState() !== 'down') {
+          <li class="empty first">
+            <app-logo [size]="56" />
+            <b>Nothing to practise yet</b>
+            <span>Paste a text on the left. Parrot reads it to you, listens to you read it, and shows each word that came out wrong.</span>
+          </li>
+        }
+      }
+    </ul>
+  </div>
+</div>

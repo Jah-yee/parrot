@@ -30,6 +30,11 @@
               }
             ],
             "styles": [
+              "@fontsource-variable/bricolage-grotesque/opsz.css",
+              "@fontsource/figtree/400.css",
+              "@fontsource/figtree/500.css",
+              "@fontsource/figtree/600.css",
+              "@fontsource/figtree/700.css",
               "src/styles.scss"
             ]
           },

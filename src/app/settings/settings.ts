@@ -109,13 +109,13 @@ export function applyTheme(t: Theme) {
       gap: 8px;
     }
     .bad {
-      color: var(--bad);
+      color: var(--wrong-ink);
     }
     .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--good);
+      background: var(--accent);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

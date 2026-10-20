@@ -52,10 +52,11 @@ def text_info(d):
     body = open(os.path.join(d, "text.txt")).read()
     created = meta.get("created") or datetime.datetime.fromtimestamp(
         os.path.getmtime(os.path.join(d, "text.txt"))).isoformat(timespec="seconds")
-    last = [v["last"] for v in scores(os.path.basename(d)).values()]
+    per_part = scores(os.path.basename(d))
+    last = [v["last"] for v in per_part.values()]
     return {"id": os.path.basename(d), "title": meta.get("title") or " ".join(body.split()[:6]) + "…", "text": body,
             "words": len(body.split()), "created": created, "mode": meta.get("mode", "sentences"),
-            "opened": meta.get("opened"), "practised": len(last),
+            "opened": meta.get("opened"), "practised": len(last), "scores": per_part,
             "average": round(sum(last) / len(last)) if last else None}
 
 
@@ -88,6 +89,25 @@ def scores(tid):
             out[os.path.basename(os.path.dirname(d))] = {"last": rs[-1]["score"], "best": max(r["score"] for r in rs),
                                                          "tries": len(rs)}
     return out
+
+
+def activity(days=7):
+    """Tries per day for the last days (today last), and the average score of those tries."""
+    today = datetime.date.today()
+    counts = {today - datetime.timedelta(days=k): 0 for k in range(days)}
+    total, n = 0, 0
+    for js in glob.glob(os.path.join(paths.TEXTS, "*", "p-*", "*.json")):
+        stem = os.path.basename(js)[:8]
+        try:
+            day = datetime.date(int(stem[:4]), int(stem[4:6]), int(stem[6:8]))
+        except ValueError:
+            continue
+        if day in counts:
+            counts[day] += 1
+            total += json.load(open(js))["score"]
+            n += 1
+    return {"days": [{"date": d.isoformat(), "tries": counts[d]} for d in sorted(counts)],
+            "tries": n, "average": round(total / n) if n else None}
 
 
 def attempts(folder):
@@ -157,6 +177,14 @@ class Handler(BaseHTTPRequestHandler):
                 return attempts(part_dir(q["text"], q["part"]))
             if p == "/api/attempt":
                 return json.load(open(os.path.join(part_dir(q["text"], q["part"]), os.path.basename(q["id"]) + ".json")))
+            if p == "/api/activity":
+                return activity()
+            if p == "/api/peaks":
+                # the loudness of a recording in n slices, 0-1, for the waveform
+                f = media(q["f"].removeprefix("/files/"))
+                if not f:
+                    return self.send(404, {"error": "not found"})
+                return speech.peaks(f, int(q.get("n", 92)))
             if p == "/api/pron":
                 return sounds.sounds_like(q["w"]) or {}
             if p.startswith("/files/"):

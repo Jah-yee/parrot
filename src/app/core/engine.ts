@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Attempt, AttemptSummary, Mode, PartScore, SoundsLike, TextItem } from './models';
+import { Activity, Attempt, AttemptSummary, Mode, PartScore, SoundsLike, TextItem } from './models';
 
 /** The local speech engine (engine/server.py for now). */
 export const ENGINE = 'http://127.0.0.1:8770';
@@ -62,6 +62,15 @@ export class Engine {
       headers: { 'Content-Type': audio.type || 'audio/webm' },
       body: audio,
     });
+  }
+
+  activity() {
+    return this.call<Activity>('/api/activity');
+  }
+
+  /** The loudness of a saved recording in n slices, 0-1, for the waveform. */
+  peaks(path: string, n: number) {
+    return this.call<number[]>(`/api/peaks?f=${encodeURIComponent(path)}&n=${n}`);
   }
 
   soundsLike(word: string) {

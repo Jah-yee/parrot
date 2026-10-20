@@ -7,6 +7,10 @@ export class Recorder {
   readonly elapsed = signal(0);
   /** 0-1, the loudest sample of the last few milliseconds */
   readonly level = signal(0);
+  /** the level every 100 ms of the take so far, for the live waveform */
+  readonly trace = signal<number[]>([]);
+  /** the microphone's name, once the browser has told us */
+  readonly device = signal('');
 
   private rec: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
@@ -32,14 +36,25 @@ export class Recorder {
     this.ctx.createMediaStreamSource(this.stream).connect(analyser);
     const buf = new Uint8Array(analyser.fftSize);
     const t0 = performance.now();
+    let peak100 = 0;
+    let last = t0;
+    this.trace.set([]);
+    this.device.set(this.stream.getAudioTracks()[0]?.label ?? '');
     this.recording.set(true);
     this.timer = window.setInterval(() => {
       this.elapsed.set((performance.now() - t0) / 1000);
       analyser.getByteTimeDomainData(buf);
       let peak = 0;
       for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
-      this.level.set(Math.min(1, peak / 100));
-    }, 50);
+      const level = Math.min(1, peak / 100);
+      this.level.set(level);
+      peak100 = Math.max(peak100, level);
+      if (performance.now() - last >= 100) {
+        this.trace.update((t) => [...t, peak100]);
+        peak100 = 0;
+        last = performance.now();
+      }
+    }, 25);
   }
 
   stop(): Promise<Blob> {

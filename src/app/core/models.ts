@@ -11,6 +11,8 @@ export interface TextItem {
   /** parts recorded at least once, and their average latest score */
   practised: number;
   average: number | null;
+  /** the scores of every recorded part, by part key */
+  scores: Record<string, PartScore>;
 }
 
 /** One part of a text that is read and recorded on its own. */
@@ -68,4 +70,10 @@ export interface PartScore {
 export interface SoundsLike {
   spell?: [string, boolean][];
   ipa?: string;
+}
+
+export interface Activity {
+  days: { date: string; tries: number }[];
+  tries: number;
+  average: number | null;
 }
