@@ -1,4 +1,6 @@
-# 🦜 Parrot
+<img src="design/app-icon.png" width="96" alt="">
+
+# Parrot
 
 **Read a text aloud and see which words came out wrong.**
 

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#27B169"/>
+      <stop offset="1" stop-color="#147C47"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0B3D22" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- the macOS icon grid: an 824 px rounded tile centred on 1024 -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)" filter="url(#shadow)"/>
+  <g transform="translate(-58 0)">
+    <!-- head -->
+    <circle cx="470" cy="512" r="212" fill="#FFFFFF"/>
+    <!-- cheek -->
+    <circle cx="488" cy="590" r="46" fill="#E5372B" opacity="0.9"/>
+    <!-- eye, with a highlight -->
+    <circle cx="560" cy="452" r="36" fill="#14201A"/>
+    <circle cx="572" cy="440" r="11" fill="#FFFFFF"/>
+    <!-- hooked beak: upper and lower -->
+    <path d="M628 410 C756 396 832 470 806 600 C790 560 744 534 662 536 Z" fill="#FFC23D"/>
+    <path d="M662 536 C724 534 766 556 784 596 C744 628 690 618 654 584 Z" fill="#F29A1A"/>
+    <!-- what it says: two sound waves -->
+    <path d="M858 508 A72 72 0 0 1 858 612" stroke="#FFFFFF" stroke-width="30" fill="none" stroke-linecap="round" opacity="0.92"/>
+    <path d="M906 456 A140 140 0 0 1 906 664" stroke="#FFFFFF" stroke-width="30" fill="none" stroke-linecap="round" opacity="0.6"/>
+  </g>
+</svg>
