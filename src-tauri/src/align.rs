@@ -10,6 +10,19 @@ use crate::text::WordTime;
 use ort::session::Session;
 use ort::value::Tensor;
 use std::path::Path;
+use std::sync::OnceLock;
+
+static ENVIRONMENT: OnceLock<ort::environment::Environment> = OnceLock::new();
+
+/// The ONNX Runtime environment, made once for the whole process: ONNX Runtime 1.23 (the Intel Mac build) allows
+/// only one per process.
+fn environment() -> Result<&'static ort::environment::Environment, String> {
+    if let Some(env) = ENVIRONMENT.get() {
+        return Ok(env);
+    }
+    let env = ort::init().with_name("parrot").build().map_err(|e| e.to_string())?;
+    Ok(ENVIRONMENT.get_or_init(|| env))
+}
 
 /// the model's tokens: blank (0), word separator "|" (4), then ' - a b c ... z from 5
 const TOKENS: usize = 33;
@@ -27,8 +40,8 @@ pub struct Aligner {
 }
 
 impl Aligner {
-    pub fn load(env: &ort::environment::Environment, model: &Path) -> Result<Self, String> {
-        let session = Session::builder(env)
+    pub fn load(model: &Path) -> Result<Self, String> {
+        let session = Session::builder(environment()?)
             .and_then(|mut b| b.commit_from_file(model))
             .map_err(|e| format!("could not load the aligner: {e}"))?;
         Ok(Self { session })
@@ -181,8 +194,7 @@ mod tests {
             eprintln!("skipped: no model or sample in {}", dir.display());
             return;
         }
-        let env = ort::init().build().unwrap();
-        let mut a = Aligner::load(&env, &model).unwrap();
+        let mut a = Aligner::load(&model).unwrap();
         let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();
         let text = "They happen when particles from the Sun hit the air high above the Earth.";
         let words = a.align(&pcm.samples, text).unwrap();
@@ -205,8 +217,7 @@ mod tests {
     #[ignore]
     fn calibrate() {
         let list = std::fs::read_to_string(std::env::var("PARROT_CALIBRATE").unwrap()).unwrap();
-        let env = ort::init().build().unwrap();
-        let mut a = Aligner::load(&env, &build_dir().join("wav2vec2-xlsr-53-english-int8.onnx")).unwrap();
+        let mut a = Aligner::load(&build_dir().join("wav2vec2-xlsr-53-english-int8.onnx")).unwrap();
         for line in list.lines().filter(|l| !l.is_empty()) {
             let (wav, text) = line.split_once('|').unwrap();
             let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();

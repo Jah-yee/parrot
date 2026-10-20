@@ -1,6 +1,6 @@
 [package]
 name = "parrot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Read a text aloud and see which words came out wrong"
 authors = ["Muzaffar Qosimov"]
 license = "MIT"
@@ -20,7 +20,7 @@ name = "Parrot"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2.7.3" }
+tauri-build = { version = "2.7.3", features = [] }
 
 [dependencies]
 serde_json = "1.0"
@@ -29,7 +29,8 @@ log = "0.4"
 tauri = { version = "2.12.4", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 # the speech engine
-ort = "=2.0.0-rc.15"
+# the ONNX Runtime 1.23 API is all Parrot needs, and 1.23 is the last release Microsoft built for Intel Macs
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "download-binaries", "tls-native", "copy-dylibs", "api-23"] }
 ndarray = "0.17"
 hound = "3.5"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }

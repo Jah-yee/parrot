@@ -1,4 +1,4 @@
-# Builds the installers for macOS (Apple Silicon), Windows and Linux when a version tag is pushed
+# Builds the installers for macOS (Apple Silicon and Intel), Windows and Linux when a version tag is pushed
 # (git tag v0.1.0 && git push origin v0.1.0), and attaches them to a draft release to review and publish.
 # Each installer is also uploaded under a fixed name (Parrot-macOS-Apple-chip.dmg, ...), which the download page (docs/)
 # links to through releases/latest/download/, so a new release needs no change to the page.
@@ -20,6 +20,9 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
+          # Intel Macs: cross-built on Apple Silicon, with Microsoft's ONNX Runtime 1.23.2 (the last Intel build) inside
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin --config src-tauri/tauri.intel.conf.json
           # ONNX Runtime's ready-made Linux build needs glibc 2.38+ (Ubuntu 24.04 and other 2024+ systems)
           - platform: ubuntu-24.04
             args: ''
@@ -42,13 +45,22 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 
       - run: npm ci
+
+      - name: ONNX Runtime for Intel Macs
+        if: contains(matrix.args, 'x86_64-apple-darwin')
+        run: |
+          curl -sSL https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x86_64-1.23.2.tgz | tar xz
+          mv onnxruntime-osx-x86_64-1.23.2 .ort-intel
+          echo "ORT_LIB_LOCATION=$PWD/.ort-intel/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=13.4" >> $GITHUB_ENV
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -71,7 +83,11 @@ jobs:
           mkdir -p fixed
           case "${{ matrix.platform }}" in
             macos-latest)
-              cp $b/aarch64-apple-darwin/release/bundle/dmg/*.dmg fixed/Parrot-macOS-Apple-chip.dmg ;;
+              if [[ "${{ matrix.args }}" == *x86_64* ]]; then
+                cp $b/x86_64-apple-darwin/release/bundle/dmg/*.dmg fixed/Parrot-macOS-Intel.dmg
+              else
+                cp $b/aarch64-apple-darwin/release/bundle/dmg/*.dmg fixed/Parrot-macOS-Apple-chip.dmg
+              fi ;;
             windows-latest)
               cp $b/release/bundle/nsis/*-setup.exe fixed/Parrot-Windows-setup.exe
               cp $b/release/bundle/msi/*.msi fixed/Parrot-Windows.msi ;;

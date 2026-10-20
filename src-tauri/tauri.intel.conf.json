@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "macOS": {
+      "minimumSystemVersion": "13.4",
+      "frameworks": ["../.ort-intel/lib/libonnxruntime.1.23.2.dylib"]
+    }
+  }
+}

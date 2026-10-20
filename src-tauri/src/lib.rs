@@ -19,7 +19,6 @@ use tauri::{AppHandle, Manager, State};
 pub struct Engine {
     store: Store,
     models: PathBuf,
-    env: Mutex<Option<ort::environment::Environment>>,
     aligner: Mutex<Option<align::Aligner>>,
     recognizer: Mutex<Option<asr::Recognizer>>,
 }
@@ -30,11 +29,7 @@ impl Engine {
     fn with_aligner<T>(&self, f: impl FnOnce(&mut align::Aligner) -> Result<T, String>) -> Result<T, String> {
         let mut guard = self.aligner.lock().unwrap();
         if guard.is_none() {
-            let mut env = self.env.lock().unwrap();
-            if env.is_none() {
-                *env = Some(ort::init().with_name("parrot").build().map_err(|e| e.to_string())?);
-            }
-            *guard = Some(align::Aligner::load(env.as_ref().unwrap(), &models::path(&self.models, &models::ALIGNER))?);
+            *guard = Some(align::Aligner::load(&models::path(&self.models, &models::ALIGNER))?);
         }
         f(guard.as_mut().unwrap())
     }
@@ -212,7 +207,6 @@ pub fn run() {
             let engine = Arc::new(Engine {
                 models: data.join("models"),
                 store: Store { data },
-                env: Mutex::new(None),
                 aligner: Mutex::new(None),
                 recognizer: Mutex::new(None),
             });
@@ -241,7 +235,7 @@ mod tests {
         let models = home.join("Library/Application Support/io.github.qwertymuzaffar.parrot/models");
         let data = std::env::temp_dir().join(format!("parrot-e2e-{}", std::process::id()));
         std::fs::create_dir_all(data.join("texts")).unwrap();
-        let engine = Engine { store: Store { data: data.clone() }, models, env: Mutex::new(None), aligner: Mutex::new(None), recognizer: Mutex::new(None) };
+        let engine = Engine { store: Store { data: data.clone() }, models, aligner: Mutex::new(None), recognizer: Mutex::new(None) };
         let text = "The northern lights are one of the most beautiful things you can see in the night sky.";
         let t = engine.store.add(text, Some("Lights".into()), Some("sentences".into())).unwrap();
         let id = t["id"].as_str().unwrap().to_string();
