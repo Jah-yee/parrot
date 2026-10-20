@@ -6,290 +6,298 @@
 <title>Parrot — say it right</title>
 <meta name="description" content="Parrot is a free, open-source desktop app for practising spoken English. Paste any text, listen to it, read it aloud, and see which words came out wrong. On-device transcription, offline, on macOS, Windows and Linux.">
 <meta property="og:title" content="Parrot — say it right">
-<meta property="og:description" content="Read a text aloud and see which words came out wrong. Free, open source, offline.">
+<meta property="og:description" content="Read a text aloud and see which words came out wrong. Free, open source, on-device.">
 <meta property="og:image" content="https://qwertymuzaffar.github.io/parrot/practice.webp">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ground: #f2f4ef; --surface: #ffffff; --surface-2: #eef1ea; --line: #dce1d6;
-  --ink: #14201a; --ink-2: #45514a; --muted: #66716a;
-  --accent: #17834a; --accent-ink: #ffffff; --good-bg: #e1f1e7; --good-ink: #11673a;
-  --warn-bg: #fdf0cf; --warn-line: #e0a21a; --wrong-bg: #fce3e0; --wrong-ink: #b3261e;
-  --hero: #14201a; --hero-ink: #ffffff; --hero-2: #b4beb6; --hero-accent: #3cc777;
-  --display: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font: Figtree, system-ui, -apple-system, sans-serif;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ground: #0f1411; --surface: #171d19; --surface-2: #222a24; --line: #2b342e;
-    --ink: #e9eee9; --ink-2: #b4beb6; --muted: #909a92;
-    --accent: #3cc777; --accent-ink: #06200f; --good-bg: #16301f; --good-ink: #6fe09e;
-    --warn-bg: #3a2c0e; --wrong-bg: #401b18; --wrong-ink: #ff8a80;
-    --hero: #1b241e;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --ground: #0f1411; --surface: #171d19; --surface-2: #222a24; --line: #2b342e;
-  --ink: #e9eee9; --ink-2: #b4beb6; --muted: #909a92;
-  --accent: #3cc777; --accent-ink: #06200f; --good-bg: #16301f; --good-ink: #6fe09e;
-  --warn-bg: #3a2c0e; --wrong-bg: #401b18; --wrong-ink: #ff8a80;
-  --hero: #1b241e;
-  color-scheme: dark;
-}
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
-a { color: var(--accent); }
-h1, h2, h3 { font-family: var(--display); letter-spacing: -0.025em; margin: 0; }
-.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
-@media (min-width: 700px) { .wrap { padding: 0 32px; } }
-
-/* nav */
-nav { display: flex; align-items: center; gap: 18px; padding: 18px 0; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
-nav .links { margin-left: auto; display: flex; align-items: center; gap: 18px; }
-nav .links a { color: var(--ink-2); text-decoration: none; font-weight: 500; font-size: 15px; }
-nav .links a:hover { color: var(--ink); }
-.gh { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
-@media (max-width: 640px) { nav .links .hide-sm { display: none; } }
-
-/* hero */
-.hero { text-align: center; padding: 56px 0 28px; }
-.hero h1 { font-size: clamp(40px, 7vw, 76px); font-weight: 800; line-height: 1.02; }
-.hero h1 .mark { background: var(--wrong-bg); box-shadow: inset 0 -5px 0 var(--wrong-ink); border-radius: 12px; padding: 0 10px; }
-.hero .tag { position: relative; display: inline-block; }
-.hero .tag small { position: absolute; left: 4px; top: -18px; font: 700 13px/1.5 var(--font); letter-spacing: 0.02em; color: #fff; background: var(--wrong-ink); border-radius: 7px; padding: 1px 8px; white-space: nowrap; }
-.hero p.lead { max-width: 640px; margin: 22px auto 0; font-size: clamp(17px, 2.2vw, 20px); color: var(--ink-2); }
-.cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 54px; padding: 0 24px; border-radius: 14px; font-weight: 700; font-size: 17px; text-decoration: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { filter: brightness(1.06); }
-.btn:hover { border-color: var(--muted); }
-.btn small { font-weight: 500; opacity: 0.8; font-size: 14px; }
-.facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin-top: 18px; font-size: 14px; color: var(--muted); }
-.facts span { display: inline-flex; align-items: center; gap: 6px; }
-.facts i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-
-.shot { margin: 46px auto 0; max-width: 1060px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(20, 32, 26, 0.18); background: var(--surface); }
-.shot .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
-.shot .bar i { width: 11px; height: 11px; border-radius: 50%; background: #e2e5df; }
-.shot .bar i:nth-child(1) { background: #ff5f57; } .shot .bar i:nth-child(2) { background: #febc2e; } .shot .bar i:nth-child(3) { background: #28c840; }
-.shot img { display: block; width: 100%; height: auto; }
-
-/* sections */
-section { padding: 88px 0 0; }
-.kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
-section h2 { font-size: clamp(30px, 4.4vw, 44px); font-weight: 800; margin-top: 8px; max-width: 720px; }
-section p.sub { color: var(--ink-2); max-width: 640px; margin: 12px 0 0; font-size: 18px; }
-
-.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 34px; }
-.feature { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
-.feature .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--good-bg); color: var(--good-ink); margin-bottom: 14px; }
-.feature h3 { font-size: 20px; }
-.feature p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; }
-.chip { display: inline-block; border-radius: 7px; padding: 0 5px; font-weight: 600; }
-.chip.r { background: var(--wrong-bg); box-shadow: inset 0 -2px 0 var(--wrong-ink); }
-.chip.a { background: var(--warn-bg); box-shadow: inset 0 -2px 0 var(--warn-line); }
-.spell b { color: var(--accent); }
-
-.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 34px; counter-reset: s; }
-.step { border-top: 3px solid var(--accent); padding-top: 16px; }
-.step::before { counter-increment: s; content: counter(s); font-family: var(--display); font-weight: 800; font-size: 44px; color: var(--accent); line-height: 1; }
-.step h3 { font-size: 20px; margin-top: 8px; }
-.step p { margin: 6px 0 0; color: var(--ink-2); font-size: 15px; }
-
-.split { display: grid; grid-template-columns: 1fr; gap: 30px; align-items: center; margin-top: 34px; }
-@media (min-width: 900px) { .split { grid-template-columns: 0.9fr 1.1fr; } }
-.split ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
-.split li { display: flex; gap: 12px; color: var(--ink-2); }
-.split li b { color: var(--ink); }
-.split li::before { content: ""; flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px; border-radius: 7px; background: var(--good-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2311673a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / 14px no-repeat; }
-.split .shot { margin: 0; }
-
-/* download */
-.download { background: var(--hero); color: var(--hero-ink); border-radius: 26px; padding: 44px 24px; margin-top: 88px; text-align: center; }
-@media (min-width: 700px) { .download { padding: 56px 48px; } }
-.download h2 { color: var(--hero-ink); margin: 8px auto 0; }
-.download .kicker { color: var(--hero-accent); }
-.download p.sub { color: var(--hero-2); margin: 12px auto 0; }
-.platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 34px; text-align: left; }
-.platform { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.platform.me { border-color: var(--hero-accent); box-shadow: 0 0 0 1px var(--hero-accent); }
-.platform h3 { display: flex; align-items: center; gap: 10px; font-size: 22px; color: var(--hero-ink); }
-.platform .req { font-size: 13px; color: var(--hero-2); }
-.platform a.dl { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 16px; border-radius: 12px; background: var(--hero-accent); color: #06200f; font-weight: 700; text-decoration: none; }
-.platform a.dl.alt { background: rgba(255, 255, 255, 0.1); color: var(--hero-ink); }
-.platform a.dl span { font-weight: 500; font-size: 13px; opacity: 0.8; }
-.platform a.dl:hover { filter: brightness(1.08); }
-.release-note { margin-top: 22px; font-size: 14px; color: var(--hero-2); }
-.release-note a { color: var(--hero-accent); }
-
-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; padding: 44px 0 50px; color: var(--muted); font-size: 14px; }
-footer a { color: var(--ink-2); }
-footer .brand { font-size: 18px; }
-footer .grow { flex: 1; }
-</style>
+<link rel="preload" href="fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<div class="wrap">
-  <nav aria-label="Main">
-    <a class="brand" href="#"><img src="icon.svg" width="38" height="38" alt=""> Parrot</a>
-    <div class="links">
-      <a class="hide-sm" href="#features">Features</a>
-      <a class="hide-sm" href="#how">How it works</a>
-      <a class="hide-sm" href="#download">Download</a>
-      <a class="gh" href="https://github.com/qwertymuzaffar/parrot">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
-        GitHub
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="logo.svg" width="30" height="30" alt=""> Parrot</a>
+    <nav class="links" aria-label="Main">
+      <a href="features/">Features</a>
+      <a href="#private">Privacy</a>
+      <a href="#download">Download</a>
+    </nav>
+    <div class="end">
+      <a class="icon-link" href="https://github.com/qwertymuzaffar/parrot" aria-label="Parrot on GitHub">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
       </a>
+      <a class="btn green small" href="#download">Download</a>
     </div>
-  </nav>
+  </div>
+</header>
 
-  <header class="hero">
-    <h1>Say it <span class="tag"><small>heard “write”</small><span class="mark">right</span></span>.</h1>
-    <p class="lead">Paste anything you need to say out loud. Parrot reads it to you, listens to you read it, and shows exactly which words came out wrong, and how they should sound.</p>
-    <div class="cta">
-      <a class="btn primary" id="main-download" href="#download">Download Parrot</a>
-      <a class="btn" href="https://github.com/qwertymuzaffar/parrot">View on GitHub</a>
-    </div>
-    <div class="facts">
-      <span><i></i>On-device transcription</span>
-      <span><i></i>Free and open source</span>
-      <span><i></i>Works offline</span>
-      <span><i></i>Your voice never leaves your computer</span>
-      <span><i></i>macOS · Windows · Linux</span>
-    </div>
-    <div class="shot">
-      <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
-      <img src="practice.webp" width="2560" height="1560" alt="Parrot's practice screen: the sentence about the northern lights with “things” marked red because it was heard as “sinks”, a waveform of the take, the score 94% clear, and the word card showing that things sounds like THINGZ.">
-    </div>
-  </header>
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <span class="eyebrow">Pronunciation practice, on your computer</span>
+        <h1>Say it <span class="mark"><small>heard “write”</small>right</span>.</h1>
+        <p class="sub">Paste anything you need to say out loud. Parrot reads it to you, listens to you read it, and shows exactly which words came out wrong, and how they should sound.</p>
+        <div class="actions">
+          <a class="btn green" id="main-download" href="#download"><span id="main-icon"></span><span id="main-label">Download Parrot</span></a>
+          <a class="btn" href="https://github.com/qwertymuzaffar/parrot">Source on GitHub</a>
+        </div>
+        <div class="meta">
+          <span><i></i>Free and open source</span>
+          <span><i></i>On-device transcription</span>
+          <span><i></i>macOS, Windows, Linux</span>
+        </div>
+      </div>
 
-  <section id="features">
-    <span class="kicker">Features</span>
-    <h2>Like a pronunciation check, for whole sentences.</h2>
-    <p class="sub">Look up one word online and you hear it alone. Parrot checks what you actually need to say: a whole introduction, a talk, a script.</p>
-    <div class="features">
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/></svg></div>
-        <h3>Word by word</h3>
-        <p>Every word you read gets a verdict. <span class="chip r">Misheard</span> when a listener would hear another word, <span class="chip a">sounded off</span> when it was close but not right.</p>
-      </div>
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></div>
-        <h3>How it should sound</h3>
-        <p>Click a word to see it spelled the way it sounds, <span class="spell">sik·<b>STEEN</b></span>, with its IPA, and hear it alone or slowed down.</p>
-      </div>
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h12m-4-4 4 4-4 4M17 17H5m4 4-4-4 4-4"/></svg></div>
-        <h3>Yours, then the right one</h3>
-        <p>Play your own word cut out of your recording, then the correct one right after it. The difference is easy to hear side by side.</p>
-      </div>
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h9M4 18h6"/></svg></div>
-        <h3>Your own texts</h3>
-        <p>Paste anything. Practise it whole, sentence by sentence, or in short parts cut at commas, and switch any time.</p>
-      </div>
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
-        <h3>On-device transcription</h3>
-        <p>Whisper runs on your computer, not in the cloud. No account, no upload: your voice and your recordings stay on your disk.</p>
-      </div>
-      <div class="feature">
-        <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 20V12M10 20V8M15 20v-5M20 20V4"/></svg></div>
-        <h3>See yourself improve</h3>
-        <p>Every try is kept. Watch a sentence go from 71% to 94%, and your pace settle into the natural 140 to 165 words a minute.</p>
-      </div>
+      <figure class="demo" id="demo" aria-label="A demo: a sentence is read aloud, the word things is heard as sinks and marked red, and Parrot shows that it sounds like THINGZ.">
+        <div class="top">
+          <span class="dot"></span>
+          <span id="demo-status"><b>Listening</b> · read the sentence aloud</span>
+          <span class="grow"></span>
+          <span class="ring"><svg width="22" height="22" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" stroke-opacity="0.15" stroke-width="4"/><circle id="demo-arc" cx="18" cy="18" r="15" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 94.2" transform="rotate(-90 18 18)"/></svg><span id="demo-score">0%</span> clear</span>
+        </div>
+        <p class="sentence" id="demo-sentence"></p>
+        <div class="bars" id="demo-bars" aria-hidden="true"></div>
+        <div class="card" id="demo-card">
+          <div class="h"><b>things</b><span class="pill">misheard</span></div>
+          <div class="k">Sounds like</div>
+          <div class="s"><strong>THINGZ</strong></div>
+          <div class="ipa">/ˈθɪŋz/ · heard as “sinks”</div>
+          <button type="button" id="demo-hear"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg> Hear it</button>
+        </div>
+      </figure>
     </div>
-  </section>
-
-  <section id="how">
-    <span class="kicker">How it works</span>
-    <h2>Listen. Repeat. Fix the words that need it.</h2>
-    <div class="steps">
-      <div class="step">
-        <h3>Listen</h3>
-        <p>Parrot reads the sentence to you at the speed you choose, lighting up each word as it is spoken.</p>
-      </div>
-      <div class="step">
-        <h3>Record</h3>
-        <p>Press the red button, read it aloud, press it again. Parrot cleans up the recording and listens to it twice.</p>
-      </div>
-      <div class="step">
-        <h3>Fix</h3>
-        <p>See which words came out wrong, on the sentence and on the waveform of your take. Click one, hear it, try again.</p>
-      </div>
-    </div>
-    <div class="split">
-      <ul>
-        <li><span><b>Two listeners.</b> <a href="https://github.com/ggerganov/whisper.cpp">Whisper</a> writes down what it heard without knowing your text, so a misheard word is one a person might mishear too.</span></li>
-        <li><span><b>Every sound scored.</b> A forced aligner finds each word of your text in the recording and scores how well the sounds match it.</span></li>
-        <li><span><b>A real dictionary.</b> How each word sounds comes from the <a href="https://github.com/cmusphinx/cmudict">CMU Pronouncing Dictionary</a>, about 135,000 English words.</span></li>
-        <li><span><b>Your library.</b> Keep the texts you're working on, pick up where you left off, and see the week's practice at a glance.</span></li>
-      </ul>
-      <div class="shot">
-        <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
-        <img src="home.webp" width="2560" height="1560" alt="Parrot's home screen: a box to paste a new text with the choice of whole text, sentences or short parts, a continue card, and four sample texts with their scores." loading="lazy">
-      </div>
-    </div>
-  </section>
-
-  <div class="download" id="download">
-    <span class="kicker">Download</span>
-    <h2>Get Parrot. It's free.</h2>
-    <p class="sub">For macOS, Windows and Linux. The speech model (about 470 MB) downloads the first time you open it; after that Parrot works offline.</p>
-    <div class="platforms">
-      <div class="platform" data-os="mac">
-        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-4.2zM13.9 5.2c.7-.8 1.2-2 1-3.2-1 .1-2.2.7-2.9 1.5-.6.7-1.2 1.9-1.1 3 1.2.1 2.3-.5 3-1.3z"/></svg> macOS</h3>
-        <span class="req">macOS 11 Big Sur or later</span>
-        <a class="dl" data-asset="mac-arm" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Apple Silicon <span>M1 and later · .dmg</span></a>
-        <a class="dl alt" data-asset="mac-intel" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Intel <span>.dmg</span></a>
-      </div>
-      <div class="platform" data-os="windows">
-        <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2 4.5 10 3.4v7.8H2zM11 3.3 22 2v9.2H11zM2 12.2h8V20l-8-1.1zM11 12.2h11V22l-11-1.5z"/></svg> Windows</h3>
-        <span class="req">Windows 10 or 11, 64-bit</span>
-        <a class="dl" data-asset="win-exe" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Installer <span>.exe</span></a>
-        <a class="dl alt" data-asset="win-msi" href="https://github.com/qwertymuzaffar/parrot/releases/latest">MSI package <span>.msi</span></a>
-      </div>
-      <div class="platform" data-os="linux">
-        <h3><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m7 9 3 2-3 2M12 14h4M8 22h8"/></svg> Linux</h3>
-        <span class="req">64-bit, most distributions</span>
-        <a class="dl" data-asset="linux-appimage" href="https://github.com/qwertymuzaffar/parrot/releases/latest">AppImage <span>runs anywhere</span></a>
-        <a class="dl alt" data-asset="linux-deb" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Debian / Ubuntu <span>.deb</span></a>
-      </div>
-    </div>
-    <p class="release-note" id="release-note">All releases and source code are on <a href="https://github.com/qwertymuzaffar/parrot/releases">GitHub</a>.</p>
   </div>
 
-  <footer>
-    <a class="brand" href="#"><img src="icon.svg" width="28" height="28" alt=""> Parrot</a>
+  <div class="wave" aria-hidden="true"></div>
+
+  <div class="wrap">
+    <section class="shot">
+      <div class="frame">
+        <img src="practice.webp" width="2560" height="1560" alt="Parrot's practice screen: the sentence about the northern lights with “things” marked red because it was heard as “sinks”, a waveform of the take, the score 94% clear, and the word card showing that things sounds like THINGZ.">
+      </div>
+      <div class="legend">
+        <div><i class="r"></i><span><b>Misheard.</b> A listener would hear another word: Parrot shows which.</span></div>
+        <div><i class="a"></i><span><b>Sounded off.</b> Close, but the sounds didn't match well.</span></div>
+        <div><i class="g"></i><span><b>Your take.</b> Every try is kept, with your score and pace.</span></div>
+      </div>
+    </section>
+
+    <div class="rows">
+      <div class="row">
+        <div>
+          <span class="eyebrow">01 · Check</span>
+          <h2>A verdict for every word you say.</h2>
+          <p>Whisper writes down what it heard without knowing your text, and a second check scores how each sound matched. Together they find the words a listener would trip over.</p>
+          <ul>
+            <li>Red when it was heard as another word, with what was heard</li>
+            <li>Amber when it was close, but not quite</li>
+            <li>The same stretch marked on the waveform of your take</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="features/words.webp" width="1376" height="1046" alt="A sentence with things marked red and tagged heard sinks, above a waveform with the same stretch in red." loading="lazy"></div>
+      </div>
+
+      <div class="row flip">
+        <div>
+          <span class="eyebrow">02 · Learn</span>
+          <h2>Hear how it should sound.</h2>
+          <p>Click any word: see it spelled the way it sounds, with the stressed syllable in capitals and its IPA, then hear it alone, slowly, or right after your own.</p>
+          <ul>
+            <li>About 135,000 words from the CMU Pronouncing Dictionary</li>
+            <li>Your word cut out of your take, then the correct one</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="features/sounds.webp" width="684" height="712" alt="The word card for things: sounds like THINGZ, IPA θɪŋz, heard as sinks, with buttons to hear it, slowly, yours, and compare." loading="lazy"></div>
+      </div>
+
+      <div class="row">
+        <div>
+          <span class="eyebrow">03 · Practise</span>
+          <h2>Anything you need to say out loud.</h2>
+          <p>An interview answer, a talk, a wedding toast. Paste it once and practise it whole, sentence by sentence, or in short parts cut at commas.</p>
+          <ul>
+            <li>Your texts are kept, with where you left off</li>
+            <li>Read to you at the speed you choose, each word lit as it's spoken</li>
+          </ul>
+        </div>
+        <div class="pic"><img src="features/texts.webp" width="896" height="1036" alt="The new-text box with a wedding toast pasted in, and the choice to practise it whole, in 3 sentences or in 6 short parts." loading="lazy"></div>
+      </div>
+    </div>
+    <a class="more" href="features/">All features <span aria-hidden="true">→</span></a>
+  </div>
+
+  <section class="band" id="private">
+    <div class="wave" aria-hidden="true"></div>
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">Private by design</span>
+        <h2>Your voice never leaves your computer.</h2>
+        <p>Speech recognition runs on your own machine with Whisper, offline once its model is downloaded. Nothing to sign up for, nothing sent anywhere.</p>
+      </div>
+      <div class="facts">
+        <div><b>No account</b><span>Open it and start</span></div>
+        <div><b>No upload</b><span>Recordings stay on disk</span></div>
+        <div><b>Your files</b><span>Plain files you can keep</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <section class="download" id="download">
+      <div class="head">
+        <div>
+          <span class="eyebrow">Download</span>
+          <h2>Free for every desktop.</h2>
+        </div>
+        <p>The speech model (about 470 MB) downloads the first time you open Parrot. After that it works offline.</p>
+      </div>
+      <div class="os-list">
+        <div class="os-row" data-os="mac">
+          <h3><span data-icon="mac"></span>macOS<span class="you">your system</span></h3>
+          <span class="req">macOS 11 Big Sur or later</span>
+          <span class="files">
+            <a class="btn small" data-asset="mac-arm" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Apple Silicon · .dmg</a>
+            <a class="btn small" data-asset="mac-intel" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Intel · .dmg</a>
+          </span>
+        </div>
+        <div class="os-row" data-os="windows">
+          <h3><span data-icon="windows"></span>Windows<span class="you">your system</span></h3>
+          <span class="req">Windows 10 or 11, 64-bit</span>
+          <span class="files">
+            <a class="btn small" data-asset="win-exe" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Installer · .exe</a>
+            <a class="btn small" data-asset="win-msi" href="https://github.com/qwertymuzaffar/parrot/releases/latest">MSI package</a>
+          </span>
+        </div>
+        <div class="os-row" data-os="linux">
+          <h3><span data-icon="linux"></span>Linux<span class="you">your system</span></h3>
+          <span class="req">64-bit, most distributions</span>
+          <span class="files">
+            <a class="btn small" data-asset="linux-appimage" href="https://github.com/qwertymuzaffar/parrot/releases/latest">AppImage</a>
+            <a class="btn small" data-asset="linux-deb" href="https://github.com/qwertymuzaffar/parrot/releases/latest">Debian / Ubuntu · .deb</a>
+          </span>
+        </div>
+      </div>
+      <p class="release-note" id="release-note">All releases and source code are on <a href="https://github.com/qwertymuzaffar/parrot/releases">GitHub</a>.</p>
+    </section>
+
+    <div class="closing">
+      <img src="logo.svg" width="56" height="56" alt="">
+      <h2>Free, open source, and on your device.</h2>
+      <div class="actions">
+        <a class="btn green" href="#download">Download Parrot</a>
+        <a class="btn" href="https://github.com/qwertymuzaffar/parrot">View the source</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="logo.svg" width="22" height="22" alt=""> Parrot</a>
     <span>MIT licence</span>
     <span class="grow"></span>
-    <a href="https://github.com/qwertymuzaffar/parrot">Source</a>
-    <a href="https://github.com/qwertymuzaffar/parrot/issues">Report a problem</a>
+    <a href="features/">Features</a>
+    <a href="https://github.com/qwertymuzaffar/parrot">GitHub</a>
     <a href="https://github.com/qwertymuzaffar/parrot/releases">Releases</a>
-  </footer>
-</div>
+    <a href="https://github.com/qwertymuzaffar/parrot/issues">Report a problem</a>
+  </div>
+</footer>
 
 <script>
-// Fill the download links from the latest GitHub release, and put the visitor's system first.
+// The live demo: a try of one sentence, played on a loop. Click a word (or Hear it) to hear it.
 (function () {
-  var ua = navigator.userAgent;
-  var os = /Mac/i.test(ua) ? 'mac' : /Win/i.test(ua) ? 'windows' : /Linux|X11/i.test(ua) ? 'linux' : null;
-  var names = { mac: 'macOS', windows: 'Windows', linux: 'Linux' };
-  var main = document.getElementById('main-download');
-  if (os) {
-    var card = document.querySelector('.platform[data-os="' + os + '"]');
-    card.classList.add('me');
-    card.parentNode.insertBefore(card, card.parentNode.firstChild);
-    main.textContent = 'Download for ' + names[os];
+  var text = 'The northern lights are one of the most beautiful things you can see in the night sky.'.split(' ');
+  var WRONG = 9, OFF = 8, N = 40;
+  var demo = document.getElementById('demo');
+  var sentence = document.getElementById('demo-sentence');
+  var bars = document.getElementById('demo-bars');
+  var status = document.getElementById('demo-status');
+  var arc = document.getElementById('demo-arc');
+  var score = document.getElementById('demo-score');
+  var words = text.map(function (w, i) {
+    var s = document.createElement('span');
+    s.className = 'w';
+    s.textContent = w;
+    if (i === WRONG) { var t = document.createElement('span'); t.className = 'tag'; t.textContent = 'heard “sinks”'; s.appendChild(t); }
+    s.onclick = function () { say(w.replace(/[.,]/g, '')); };
+    sentence.appendChild(s);
+    return s;
+  });
+  var bar = [];
+  for (var i = 0; i < N; i++) { var b = document.createElement('span'); bars.appendChild(b); bar.push(b); }
+  function say(w) {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(w); u.lang = 'en-US'; u.rate = 0.85;
+    speechSynthesis.speak(u);
   }
+  document.getElementById('demo-hear').onclick = function () { say('things'); };
+
+  var timers = [];
+  function later(ms, f) { timers.push(setTimeout(f, ms)); }
+  var final = bar.map(function (_, i) { return 8 + Math.round(Math.abs(Math.sin(i * 0.7) * Math.cos(i * 0.23)) * 34); });
+
+  function showResult() {
+    demo.classList.add('done');
+    words.forEach(function (w) { w.classList.remove('now'); });
+    words[OFF].classList.add('unclear');
+    words[WRONG].classList.add('wrong');
+    bar.forEach(function (b, i) {
+      b.style.height = final[i] + 'px';
+      b.className = i >= 18 && i <= 20 ? 'bad' : i >= 15 && i <= 17 ? 'off' : 'took';
+    });
+    status.innerHTML = '<b>Your take</b> · 157 words a minute';
+    var p = 0;
+    var tick = setInterval(function () {
+      p = Math.min(94, p + 4);
+      score.textContent = p + '%';
+      arc.setAttribute('stroke-dasharray', (94.2 * p / 100).toFixed(1) + ' 94.2');
+      if (p >= 94) clearInterval(tick);
+    }, 30);
+  }
+
+  function play() {
+    timers.forEach(clearTimeout); timers = [];
+    demo.classList.remove('done', 'carded');
+    words.forEach(function (w) { w.className = 'w'; });
+    bar.forEach(function (b) { b.className = ''; b.style.height = '6px'; });
+    status.innerHTML = '<b>Listening</b> · read the sentence aloud';
+    score.textContent = '0%'; arc.setAttribute('stroke-dasharray', '0 94.2');
+    var step = 330;
+    words.forEach(function (w, i) {
+      later(600 + i * step, function () {
+        words.forEach(function (x) { x.classList.remove('now'); });
+        w.classList.add('now');
+        var upto = Math.round(((i + 1) / words.length) * N);
+        for (var k = 0; k < upto; k++) { bar[k].className = 'live'; bar[k].style.height = final[k] + 'px'; }
+      });
+    });
+    var end = 600 + words.length * step;
+    later(end, function () { words.forEach(function (x) { x.classList.remove('now'); }); status.innerHTML = '<b>Checking</b> · listening to your take…'; });
+    later(end + 900, showResult);
+    later(end + 2000, function () { demo.classList.add('carded'); });
+    later(end + 8000, play);
+  }
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { showResult(); demo.classList.add('carded'); }
+  else play();
+})();
+
+// The download buttons follow the visitor's system, and the links are filled from the latest GitHub release.
+(function () {
+  var icons = {
+    mac: '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.6-1-2.6-4.2zM13.9 5.2c.7-.8 1.2-2 1-3.2-1 .1-2.2.7-2.9 1.5-.6.7-1.2 1.9-1.1 3 1.2.1 2.3-.5 3-1.3z"/></svg>',
+    windows: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2 4.5 10 3.4v7.8H2zM11 3.3 22 2v9.2H11zM2 12.2h8V20l-8-1.1zM11 12.2h11V22l-11-1.5z"/></svg>',
+    linux: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m7 9 3 2-3 2M12 14h4M8 22h8"/></svg>'
+  };
+  var names = { mac: 'macOS', windows: 'Windows', linux: 'Linux' };
+  document.querySelectorAll('[data-icon]').forEach(function (el) { el.innerHTML = icons[el.dataset.icon]; });
+  var ua = navigator.userAgent;
+  var os = /Win/i.test(ua) ? 'windows' : /Linux|X11/i.test(ua) && !/Android/i.test(ua) ? 'linux' : 'mac';
+  document.querySelectorAll('.os-row').forEach(function (r) { r.classList.toggle('me', r.dataset.os === os); });
+  document.getElementById('main-icon').innerHTML = icons[os];
+  document.getElementById('main-label').textContent = 'Download for ' + names[os];
 
   var match = {
     'mac-arm': function (n) { return /\.dmg$/i.test(n) && /(aarch64|arm64)/i.test(n); },
@@ -299,23 +307,18 @@ footer .grow { flex: 1; }
     'linux-appimage': function (n) { return /\.AppImage$/i.test(n); },
     'linux-deb': function (n) { return /\.deb$/i.test(n); }
   };
-
   fetch('https://api.github.com/repos/qwertymuzaffar/parrot/releases/latest')
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (rel) {
-      var assets = rel.assets || [];
-      document.querySelectorAll('a.dl[data-asset]').forEach(function (a) {
-        var hit = assets.filter(function (x) { return match[a.dataset.asset](x.name); })[0];
+      document.querySelectorAll('a[data-asset]').forEach(function (a) {
+        var hit = (rel.assets || []).filter(function (x) { return match[a.dataset.asset](x.name); })[0];
         if (hit) a.href = hit.browser_download_url;
       });
-      if (os) {
-        var first = document.querySelector('.platform[data-os="' + os + '"] a.dl');
-        if (first && first.href.indexOf('/download/') > 0) main.href = first.href;
-      }
-      document.getElementById('release-note').innerHTML =
-        'Version ' + rel.tag_name.replace(/^v/, '') + ', released ' +
+      var first = document.querySelector('.os-row[data-os="' + os + '"] a[data-asset]');
+      if (first && first.href.indexOf('/download/') > 0) document.getElementById('main-download').href = first.href;
+      document.getElementById('release-note').innerHTML = 'Version ' + rel.tag_name.replace(/^v/, '') + ', released ' +
         new Date(rel.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) +
-        '. <a href="' + rel.html_url + '">Release notes</a> · <a href="https://github.com/qwertymuzaffar/parrot/releases">All releases</a>';
+        ' · <a href="' + rel.html_url + '">Release notes</a> · <a href="https://github.com/qwertymuzaffar/parrot/releases">All releases</a>';
     })
     .catch(function () {
       document.getElementById('release-note').innerHTML =
