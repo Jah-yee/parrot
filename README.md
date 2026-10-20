@@ -6,7 +6,7 @@
 
 **[Download for macOS, Windows and Linux](https://qwertymuzaffar.github.io/parrot/)** · [Website](https://qwertymuzaffar.github.io/parrot/)
 
-![Parrot's practice screen](docs/practice.jpg)
+![Parrot's practice screen](docs/practice.webp)
 
 Parrot is a free, open-source desktop app for practising spoken English. Paste anything you need to say out loud (a job
 interview introduction, a talk, a script), listen to it read correctly, record yourself, and Parrot shows you word by

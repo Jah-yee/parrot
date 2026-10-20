@@ -14,6 +14,11 @@ rust-version = "1.90"
 name = "parrot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# the program file is named Parrot, so the Dock and the app switcher say Parrot, not parrot
+[[bin]]
+name = "Parrot"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.7.3" }
 

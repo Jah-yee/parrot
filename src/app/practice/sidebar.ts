@@ -51,7 +51,7 @@ import { band } from '../shared/score';
       display: flex;
       flex-direction: column;
       gap: 12px;
-      padding: 18px 14px 12px;
+      padding: calc(18px + var(--titlebar)) 14px 12px;
       border-right: 1px solid var(--line);
       background: var(--side);
       min-height: 0;

@@ -9,6 +9,8 @@ import { applyTheme, Settings } from './settings/settings';
   selector: 'app-root',
   imports: [Home, Practice, Settings],
   template: `
+    <!-- the strip under the macOS window buttons: drags the window, as the hidden title bar did -->
+    <div class="titlebar" data-tauri-drag-region></div>
     @if (store.view() === 'practice') {
       <app-practice (settings)="settings().open()" />
     } @else {
@@ -24,6 +26,8 @@ export class App implements OnInit {
   protected settings = viewChild.required(Settings);
 
   async ngOnInit() {
+    // in the desktop app on macOS the title bar is hidden and the window buttons sit over the app
+    if ('__TAURI_INTERNALS__' in window && /Mac/.test(navigator.userAgent)) document.documentElement.classList.add('mac-app');
     applyTheme(readSetting('theme', 'system'));
     await this.store.loadTexts();
     this.store.loadActivity();

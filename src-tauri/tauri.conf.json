@@ -18,7 +18,9 @@
         "minWidth": 960,
         "minHeight": 640,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
@@ -37,5 +39,6 @@
     ],
     "category": "Education",
     "shortDescription": "Read a text aloud and see which words came out wrong"
-  }
+  },
+  "mainBinaryName": "Parrot"
 }
