@@ -44,7 +44,10 @@
       "icons/icon.ico"
     ],
     "category": "Education",
-    "shortDescription": "Read a text aloud and see which words came out wrong"
+    "shortDescription": "Read a text aloud and see which words came out wrong",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
   },
   "mainBinaryName": "Parrot"
 }

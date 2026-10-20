@@ -1,0 +1,3 @@
+# whisper.cpp uses C++17 <filesystem>, which macOS has from 10.15; Parrot supports macOS 11 Big Sur and later
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"
