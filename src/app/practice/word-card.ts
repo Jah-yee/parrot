@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, resource } from '@angular/core';
+import { soundUnits } from '../core/sounds';
 import { bare } from '../core/split';
 import { Store } from '../core/store';
 import { Icon } from '../shared/icon';
@@ -44,6 +45,25 @@ import { Icon } from '../shared/icon';
         <span class="none">Not in the dictionary. Use Hear it.</span>
       }
     </div>
+
+    @if (mine()?.score != null) {
+      <div class="take">
+        <div class="take-head">
+          <span class="eyebrow">Your take</span>
+          <span class="pct" [class]="mine()!.status"><b>{{ pct(mine()!.score) }}%</b> sound match</span>
+        </div>
+        @if (units().length) {
+          <div class="units">
+            @for (u of units(); track $index) {
+              <span class="unit" [class]="u.level" [title]="u.score == null ? '' : pct(u.score) + '%'">{{ u.text }}</span>
+            }
+          </div>
+        }
+        @if (weak(); as weak) {
+          <p class="weak" [innerHTML]="weak"></p>
+        }
+      </div>
+    }
 
     @if (why()) {
       <p class="why" [innerHTML]="why()"></p>
@@ -107,6 +127,69 @@ import { Icon } from '../shared/icon';
     .none {
       color: var(--muted);
     }
+    .take {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .take-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .pct {
+      font-size: 13px;
+      color: var(--muted);
+      b {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--good-ink);
+        font-variant-numeric: tabular-nums;
+      }
+      &.unclear b {
+        color: var(--warn-ink);
+      }
+      &.wrong b {
+        color: var(--wrong-ink);
+      }
+    }
+    .units {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .unit {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 7px 9px;
+      border-radius: 8px;
+      background: var(--good-bg);
+      color: var(--good-ink);
+      &.warn {
+        background: var(--warn-bg);
+        color: var(--warn-ink);
+        box-shadow: inset 0 -2px 0 var(--warn-line);
+      }
+      &.bad {
+        background: var(--wrong-bg);
+        color: var(--wrong-ink);
+        box-shadow: inset 0 -2px 0 var(--wrong-ink);
+      }
+      &.none {
+        background: var(--surface-2);
+        color: var(--muted);
+      }
+    }
+    .weak {
+      margin: 0;
+      font-size: 13px;
+      color: var(--ink-2);
+    }
     .why {
       margin: 0;
       font-size: 13px;
@@ -139,6 +222,26 @@ export class WordCard {
     params: () => this.word() || undefined,
     loader: ({ params }) => this.store.soundsLike(params),
   });
+  protected pct = (x: number | null) => Math.round((x ?? 0) * 100);
+  /** the word's sounds as spelled, coloured by how surely each was heard; a word that passed both checks shows no
+   * weak sounds (single-letter scores are rough, and a clear word should not look wrong) */
+  protected readonly units = computed(() => {
+    const m = this.mine();
+    if (!m?.letters) return [];
+    const units = soundUnits(m.w, m.letters);
+    return m.status === 'good' ? units.map((u) => ({ ...u, level: u.level === 'none' ? u.level : ('good' as const) })) : units;
+  });
+  /** the weakest one or two sounds, in words */
+  protected readonly weak = computed(() => {
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const off = this.units()
+      .filter((u) => u.level === 'bad' || u.level === 'warn')
+      .sort((a, b) => a.score! - b.score!)
+      .slice(0, 2);
+    if (!off.length) return '';
+    const said = (u: (typeof off)[0]) => `<b>${esc(u.text)}</b> ${u.level === 'bad' ? 'sounded wrong' : 'sounded off'} (${this.pct(u.score)}%)`;
+    return 'The ' + off.map(said).join(', and the ') + '.';
+  });
   /** a sentence or two on what happened, as safe HTML (only <b> around text we escape) */
   protected readonly why = computed(() => {
     const m = this.mine();
@@ -152,11 +255,7 @@ export class WordCard {
       if (k > 0 && /^[A-Z]/.test(this.word()))
         out.push('Names are often heard as a common word: if you say it the way its owners do, you can ignore the red here.');
     }
-    if (m.status !== 'good' && m.score != null) {
-      out.push(
-        `Sound match ${Math.round(m.score * 100)}%` + (m.ref != null ? ` (the reference: ${Math.round(m.ref * 100)}%).` : '.'),
-      );
-    }
+    if (m.status !== 'good' && m.ref != null) out.push(`The reference voice scored ${this.pct(m.ref)}% here.`);
     if (m.extra) out.push(`Extra words heard after it: “${esc(m.extra)}”.`);
     return out.join(' ');
   });

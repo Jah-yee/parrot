@@ -76,22 +76,25 @@ impl Aligner {
     /// (digits) get nothing; when the take is too short for the text, nothing can be placed and every word scores 0.
     pub fn align(&mut self, audio: &[f32], text: &str) -> Result<Vec<WordTime>, String> {
         let words: Vec<&str> = text.split_whitespace().collect();
-        let mut out = vec![WordTime { t: None, score: None }; words.len()];
+        let mut out = vec![WordTime::default(); words.len()];
         // the target: each word's letters, words joined by the separator
         let mut targets: Vec<usize> = vec![];
         let mut owner: Vec<Option<usize>> = vec![]; // the word each target token spells, None for separators
+        let mut place: Vec<usize> = vec![]; // which character of its word each target token is
         for (k, w) in words.iter().enumerate() {
-            let letters: Vec<usize> = w.chars().filter_map(token).collect();
+            let letters: Vec<(usize, usize)> = w.chars().enumerate().filter_map(|(i, c)| token(c).map(|t| (i, t))).collect();
             if letters.is_empty() {
                 continue;
             }
             if !targets.is_empty() {
                 targets.push(SEPARATOR);
                 owner.push(None);
+                place.push(0);
             }
-            for l in letters {
+            for (i, l) in letters {
                 targets.push(l);
                 owner.push(Some(k));
+                place.push(i);
             }
         }
         if targets.is_empty() {
@@ -99,29 +102,40 @@ impl Aligner {
         }
         let (em, secs_per_frame) = self.emissions(audio)?;
         let Some(path) = viterbi(&em, &targets) else {
-            return Ok(vec![WordTime { t: None, score: Some(0.0) }; words.len()]);
+            return Ok(vec![WordTime { score: Some(0.0), ..Default::default() }; words.len()]);
         };
         // per word: first and last frame, and the frame-weighted mean probability of its letters
         let mut first = vec![usize::MAX; words.len()];
         let mut last = vec![0usize; words.len()];
         let mut sum = vec![0f64; words.len()];
         let mut count = vec![0usize; words.len()];
+        // and per letter: the mean probability over the frames the path gave it
+        let mut letter_sum = vec![0f64; targets.len()];
+        let mut letter_count = vec![0usize; targets.len()];
         for (t, state) in path.iter().enumerate() {
             if let Some(j) = state
                 && let Some(k) = owner[*j]
             {
+                let p = (em[t][targets[*j]] as f64).exp();
                 first[k] = first[k].min(t);
                 last[k] = last[k].max(t);
-                sum[k] += (em[t][targets[*j]] as f64).exp();
+                sum[k] += p;
                 count[k] += 1;
+                letter_sum[*j] += p;
+                letter_count[*j] += 1;
             }
         }
+        let r = |x: f64| (x * 1000.0).round() / 1000.0;
         for k in 0..words.len() {
             if count[k] > 0 {
-                let r = |x: f64| (x * 1000.0).round() / 1000.0;
+                let mut letters = vec![None; words[k].chars().count()];
+                for j in (0..targets.len()).filter(|&j| owner[j] == Some(k) && letter_count[j] > 0) {
+                    letters[place[j]] = Some(r(letter_sum[j] / letter_count[j] as f64));
+                }
                 out[k] = WordTime {
                     t: Some([r(first[k] as f64 * secs_per_frame), r((last[k] + 1) as f64 * secs_per_frame)]),
                     score: Some(r(sum[k] / count[k] as f64)),
+                    letters: Some(letters),
                 };
             }
         }
@@ -202,6 +216,10 @@ mod tests {
             eprintln!("{w:12} {:?} {:?}", r.t, r.score);
         }
         assert!(words.iter().all(|w| w.t.is_some()));
+        // a score for every character, none for the full stop
+        let last = words.last().unwrap().letters.as_ref().unwrap();
+        assert_eq!(last.len(), "Earth.".len());
+        assert!(last[..5].iter().all(Option::is_some) && last[5].is_none());
         assert!(words.windows(2).all(|p| p[0].t.unwrap()[1] <= p[1].t.unwrap()[0] + 1e-6), "words in order");
         let mean = words.iter().map(|w| w.score.unwrap()).sum::<f64>() / words.len() as f64;
         assert!(mean > 0.7, "a clean reading scores high: {mean}");
@@ -221,7 +239,14 @@ mod tests {
         for line in list.lines().filter(|l| !l.is_empty()) {
             let (wav, text) = line.split_once('|').unwrap();
             let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();
-            let words = a.align(&pcm.samples, text).unwrap();
+            let words = a.align(&crate::audio::resample(&pcm, 16000), text).unwrap();
+            // letters under 0.6, for setting the card's colours
+            for (w, r) in text.split_whitespace().zip(&words) {
+                let low: Vec<String> = w.chars().zip(r.letters.iter().flatten()).filter_map(|(c, l)| l.filter(|&l| l < 0.6).map(|l| format!("{c}{l:.2}"))).collect();
+                if !low.is_empty() {
+                    println!("  low {w}: {}", low.join(" "));
+                }
+            }
             let row: Vec<String> = text.split_whitespace().zip(&words).map(|(w, r)| format!("{w}:{:.2}", r.score.unwrap_or(-1.0))).collect();
             println!("{} || {}", wav.rsplit('/').nth(1).unwrap_or(""), row.join(" "));
         }

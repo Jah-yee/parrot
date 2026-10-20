@@ -346,10 +346,12 @@ pub fn heard_words(text: &str, heard: &str) -> (Vec<Option<String>>, Vec<String>
     (wrong, extra)
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct WordTime {
     pub t: Option<[f64; 2]>,
     pub score: Option<f64>,
+    /// how surely each character of the word was heard, None for characters that aren't letters (punctuation)
+    pub letters: Option<Vec<Option<f64>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -362,6 +364,9 @@ pub struct WordResult {
     pub status: String,
     pub heard: Option<String>,
     pub extra: String,
+    /// the score of each character of the word (takes from before 0.1.2 have none)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub letters: Option<Vec<Option<f64>>>,
 }
 
 /// How far a word's sound score may fall below the reference's before it counts as "sounded off", and the plain
@@ -395,6 +400,7 @@ pub fn judge(text: &str, heard: &str, mine: &[WordTime], reference: Option<&[Wor
                 status: status.into(),
                 heard: wrong[k].clone(),
                 extra: extra[k].clone(),
+                letters: mine.get(k).and_then(|m| m.letters.clone()),
             }
         })
         .collect()
@@ -451,11 +457,11 @@ mod tests {
     fn judge_marks_wrong_and_unclear() {
         let text = "the beautiful things";
         let mine = [
-            WordTime { t: Some([0.0, 0.2]), score: Some(0.95) },
-            WordTime { t: Some([0.2, 0.7]), score: Some(0.4) },
-            WordTime { t: Some([0.7, 1.0]), score: Some(0.9) },
+            WordTime { t: Some([0.0, 0.2]), score: Some(0.95), letters: None },
+            WordTime { t: Some([0.2, 0.7]), score: Some(0.4), letters: None },
+            WordTime { t: Some([0.7, 1.0]), score: Some(0.9), letters: None },
         ];
-        let reference = [WordTime { t: None, score: Some(0.95) }; 3];
+        let reference = vec![WordTime { t: None, score: Some(0.95), letters: None }; 3];
         let r = judge(text, "the beautiful sinks", &mine, Some(&reference));
         assert_eq!(r.iter().map(|w| w.status.as_str()).collect::<Vec<_>>(), vec!["good", "unclear", "wrong"]);
         assert_eq!(r[2].heard.as_deref(), Some("sinks"));

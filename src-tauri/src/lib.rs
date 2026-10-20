@@ -68,7 +68,7 @@ impl Engine {
             let head = self.with_aligner(|a| a.align(&a16, &first.join(" ")))?;
             mine.splice(..said, head);
             for m in &mut mine[said..] {
-                *m = text::WordTime { t: None, score: Some(0.0) };
+                *m = text::WordTime { score: Some(0.0), ..Default::default() };
             }
         }
         let words = text::judge(&txt, &heard, &mine, None);
@@ -246,6 +246,15 @@ mod tests {
         for w in a.words.iter().filter(|w| w.status != "good") {
             eprintln!("  {} {} heard={:?} score={:?}", w.w, w.status, w.heard, w.score);
         }
+        if let Ok(out) = std::env::var("PARROT_E2E_OUT") {
+            std::fs::write(out, serde_json::to_string(&a.words).unwrap()).unwrap();
+        }
+        let things = a.words.iter().find(|w| w.w == "things").unwrap();
+        let letters = things.letters.as_ref().unwrap();
+        eprintln!("  things letters: {letters:?}");
+        let th = (letters[0].unwrap() + letters[1].unwrap()) / 2.0;
+        let rest = letters[2..].iter().map(|l| l.unwrap()).sum::<f64>() / 4.0;
+        assert!(th < rest, "the th of things said as sinks scores lowest: {th} vs {rest}");
         assert!(data.join(&a.audio).exists(), "the take is saved");
         assert_eq!(engine.store.attempts(&id, text).unwrap().len(), 1);
         assert_eq!(engine.store.scores(&id).unwrap().values().next().unwrap().last, a.score);

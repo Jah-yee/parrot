@@ -39,6 +39,8 @@ export interface WordResult {
   /** what speech recognition heard instead ("" = nothing), null when it heard the word */
   heard: string | null;
   extra: string;
+  /** how surely each character was heard (takes from before 0.1.2 have none) */
+  letters?: (number | null)[];
 }
 
 export interface Attempt {
