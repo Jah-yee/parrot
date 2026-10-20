@@ -1,6 +1,7 @@
 # Builds the installers for macOS (Apple Silicon), Windows and Linux when a version tag is pushed
 # (git tag v0.1.0 && git push origin v0.1.0), and attaches them to a draft release to review and publish.
-# The download page (docs/) picks the files up from the latest published release.
+# Each installer is also uploaded under a fixed name (Parrot-macOS-Apple-chip.dmg, ...), which the download page (docs/)
+# links to through releases/latest/download/, so a new release needs no change to the page.
 name: Release
 
 on:
@@ -59,3 +60,23 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Upload under fixed names for the download page
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          b=src-tauri/target
+          mkdir -p fixed
+          case "${{ matrix.platform }}" in
+            macos-latest)
+              cp $b/aarch64-apple-darwin/release/bundle/dmg/*.dmg fixed/Parrot-macOS-Apple-chip.dmg ;;
+            windows-latest)
+              cp $b/release/bundle/nsis/*-setup.exe fixed/Parrot-Windows-setup.exe
+              cp $b/release/bundle/msi/*.msi fixed/Parrot-Windows.msi ;;
+            ubuntu-24.04)
+              cp $b/release/bundle/appimage/*.AppImage fixed/Parrot-Linux.AppImage
+              cp $b/release/bundle/deb/*.deb fixed/Parrot-Linux.deb ;;
+          esac
+          gh release upload "$tag" fixed/* --clobber
