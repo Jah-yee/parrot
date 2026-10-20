@@ -182,18 +182,12 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.0
 .download h2 { font-size: clamp(32px, 4.2vw, 46px); margin-top: 12px; }
 .download .head p { color: var(--ink-2); margin: 0; max-width: 420px; }
 .os-list { margin-top: 34px; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-.os-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px 24px; align-items: center; padding: 24px 0; border-bottom: 1px solid var(--line); }
-@media (min-width: 860px) { .os-row { grid-template-columns: 230px minmax(0, 1fr); } .os-row .req { grid-column: 1; grid-row: 2; } .os-row .options { grid-column: 2; grid-row: 1 / span 2; } }
+.os-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: center; padding: 22px 0; border-bottom: 1px solid var(--line); }
+@media (min-width: 760px) { .os-row { grid-template-columns: 220px minmax(0, 1fr) auto; } }
 .os-row h3 { display: flex; align-items: center; gap: 10px; font-size: 24px; }
 .os-row .req { color: var(--muted); font-size: 14px; }
-.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 8px; }
-@media (min-width: 860px) { .options { margin-top: 0; } }
-.option { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 14px 14px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-.option .what { display: flex; flex-direction: column; line-height: 1.35; }
-.option .what b { font-weight: 600; font-size: 15.5px; }
-.option .what span { color: var(--muted); font-size: 13.5px; }
-.os-row.me { background: linear-gradient(90deg, var(--green-soft), transparent 75%); margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
-.os-row.me .option:first-child .btn { background: var(--green); border-color: var(--green); color: var(--green-ink); }
+.os-row .files { display: flex; flex-wrap: wrap; gap: 8px; }
+.os-row.me { background: linear-gradient(90deg, var(--green-soft), transparent 70%); margin: 0 -16px; padding-left: 16px; padding-right: 16px; border-radius: 0; }
 .os-row.me .you { display: inline-block; }
 .you { display: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); margin-left: 4px; }
 .release-note { margin-top: 18px; font-size: 14px; color: var(--muted); }
