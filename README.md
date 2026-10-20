@@ -11,7 +11,7 @@
 Parrot is a free, open-source desktop app for practising spoken English. Paste anything you need to say out loud (a job
 interview introduction, a talk, a script), listen to it read correctly, record yourself, and Parrot shows you word by
 word what came out wrong, how each word should sound, and lets you hear yours and the correct one side by side.
-Everything runs on your computer: your voice is never uploaded.
+Transcription runs on your device (Whisper, offline): your voice is never uploaded.
 
 > Status: early development. The interface is being built first; the speech engine is a Python prototype that will
 > be replaced by a Rust one inside the app.

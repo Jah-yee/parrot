@@ -191,6 +191,6 @@ export class Sidebar {
     return this.store.texts().filter((t) => !q || t.title.toLowerCase().includes(q) || t.text.toLowerCase().includes(q));
   });
   protected readonly status = computed(
-    () => ({ checking: 'Starting…', ready: 'Offline · engine ready', down: 'Engine not running' })[this.store.engineState()],
+    () => ({ checking: 'Starting…', ready: 'On-device · ready', down: 'Engine not running' })[this.store.engineState()],
   );
 }
