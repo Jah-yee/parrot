@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { Engine, EngineInfo, ModelProgress } from '../core/engine';
 import { Logo } from '../shared/logo';
 
-const MB = 1024 * 1024;
+// megabytes as Finder and the download page count them
+const MB = 1_000_000;
 
 /** The first launch: download the two speech models, with progress, then Parrot works offline. */
 @Component({
