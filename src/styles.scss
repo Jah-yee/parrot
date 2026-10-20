@@ -1,0 +1,229 @@
+// Parrot's look: warm paper greys, parrot green for actions, red only for the record button and wrong words.
+
+:root {
+  --bg: #f5f4ef;
+  --surface: #ffffff;
+  --surface-2: #f0efe9;
+  --ink: #1c1c1a;
+  --ink-2: #57564f;
+  --muted: #8a8880;
+  --line: #e4e2da;
+  --accent: #15803d;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f3e8;
+  --rec: #dc2626;
+  --rec-soft: #fde8e8;
+  --good: #15803d;
+  --good-soft: #e3f3e8;
+  --warn: #a16207;
+  --warn-soft: #fdf1d3;
+  --bad: #c2261d;
+  --bad-soft: #fde4e1;
+  --now: #d6e4ff;
+  --shadow-sm: 0 1px 2px rgba(20, 20, 10, 0.06);
+  --shadow: 0 8px 30px rgba(20, 20, 10, 0.08);
+  --shadow-lg: 0 24px 70px rgba(20, 20, 10, 0.22);
+  --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color-scheme: light;
+}
+
+@mixin dark {
+  --bg: #121311;
+  --surface: #1b1c1a;
+  --surface-2: #242522;
+  --ink: #ecebe5;
+  --ink-2: #b9b7ae;
+  --muted: #85837b;
+  --line: #2f302c;
+  --accent: #34c46c;
+  --accent-ink: #062611;
+  --accent-soft: #163322;
+  --rec: #f05252;
+  --rec-soft: #3a1717;
+  --good: #4ad07f;
+  --good-soft: #163322;
+  --warn: #f2b84b;
+  --warn-soft: #382a0f;
+  --bad: #ff7b6e;
+  --bad-soft: #3d1a16;
+  --now: #26365a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark;
+  }
+}
+:root[data-theme='dark'] {
+  @include dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+// ---- shared controls
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 7px 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--muted);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  &.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    &:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
+  }
+  &.ghost {
+    border-color: transparent;
+    background: none;
+    color: var(--ink-2);
+    &:hover:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--ink);
+    }
+  }
+  &.danger {
+    color: var(--bad);
+    border-color: var(--bad);
+  }
+  &.icon {
+    padding: 7px;
+  }
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px 12px;
+  outline: none;
+  &:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+}
+
+.seg {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+
+  button {
+    border: 0;
+    background: none;
+    padding: 5px 12px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--ink-2);
+    font-weight: 500;
+    &.on {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-variant-numeric: tabular-nums;
+  &.good {
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  &.warn {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  &.bad {
+    background: var(--bad-soft);
+    color: var(--bad);
+  }
+}
+
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+kbd {
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 0 5px;
+  color: var(--ink-2);
+  background: var(--surface);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
