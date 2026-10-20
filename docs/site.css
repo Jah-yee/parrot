@@ -209,17 +209,29 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.0
 .card .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--green-soft); color: var(--green); display: grid; place-items: center; }
 .card h3 { font-family: var(--font); font-weight: 600; letter-spacing: -0.01em; font-size: 16.5px; margin-top: 16px; }
 .card p { color: var(--muted); margin: 6px 0 0; font-size: 14.5px; }
-.card .art { height: 300px; display: flex; align-items: flex-end; justify-content: center; padding: 0 28px; overflow: hidden; position: relative; }
-.card .art img { max-height: 268px; width: auto; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 30px rgba(0, 0, 0, 0.18); margin-bottom: -8px; }
+.card .art { position: relative; height: 300px; display: flex; align-items: flex-end; justify-content: center; padding: 0 28px; overflow: hidden; --amt: 100%;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--tint) var(--amt), var(--cream)) 0%, var(--cream) 82%); }
+@media (prefers-color-scheme: dark) { .card .art { --amt: 22%; } }
+/* the logo's sound bars, faint behind each picture */
+.card .art::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 46px; transform: translateY(-50%); background: url('wave.svg') center / 100% 100% no-repeat; opacity: 0.35; }
+.card .art img { position: relative; max-height: 268px; width: auto; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 28px rgba(20, 32, 26, 0.16); margin-bottom: -8px; }
 .card .art.middle { align-items: center; }
 .card .art.middle img { border-radius: 14px; margin: 0; max-height: 250px; }
-.art.coral { background: linear-gradient(140deg, #ffd9c9 0%, #f4907c 100%); }
-.art.green { background: linear-gradient(140deg, #d3f3df 0%, #47b87c 100%); }
-.art.blue { background: linear-gradient(140deg, #d6e3ff 0%, #6f8ff0 100%); }
-.art.amber { background: linear-gradient(140deg, #ffefc2 0%, #f1ae3a 100%); }
-.art.teal { background: linear-gradient(140deg, #cff3ef 0%, #2fae9f 100%); }
-.art.pink { background: linear-gradient(140deg, #ffd7e6 0%, #ea6c9f 100%); }
-.art.night { background: linear-gradient(140deg, #464c86 0%, #171a2e 100%); }
+/* a soft tint per feature, fading into the cream of the logo's tile */
+.art.coral { --tint: #f8d3c6; }
+.art.green { --tint: #cfecd9; }
+.art.blue { --tint: #d6e1f6; }
+.art.amber { --tint: #f8e6b8; }
+.art.teal { --tint: #cdebe6; }
+.art.pink { --tint: #f5d5e2; }
+.card .art.night { background: #14201a; }
+.card .art.night::before { opacity: 0.5; }
+/* the privacy card spans the rest of its row, its facts on the dark band */
+@media (min-width: 1040px) { .card.wide { grid-column: span 2; flex-direction: row; } .card.wide .text { flex: 1; } .card.wide .art { flex: 1.1; height: auto; } }
+.card .art.private { align-items: center; padding: 28px; color: #eef2ee; }
+.card .art.private .facts { position: relative; width: 100%; border-top-color: rgba(255, 255, 255, 0.16); }
+.card .art.private .facts span { color: #a9b6ae; }
+.card .art.private::before { top: auto; bottom: 14px; transform: none; }
 
 /* footer */
 footer { margin-top: 110px; border-top: 1px solid var(--line); }
