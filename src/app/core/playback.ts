@@ -87,6 +87,17 @@ export class Playback {
 
   /** A word as it was said, cut out of my take. */
   playMyWord(attempt: Attempt, wordIndex: number) {
+    if (attempt.words[wordIndex]?.t) this.run++;
+    return this.cutMyWord(attempt, wordIndex);
+  }
+
+  /** A word as I said it, then as it should sound. */
+  compareWord(attempt: Attempt, wordIndex: number, word: string) {
+    // my word is the chain's first step: it must not start a chain of its own, or the chain stops after it
+    return this.chain(() => this.cutMyWord(attempt, wordIndex), 350, () => this.sayWord(word));
+  }
+
+  private cutMyWord(attempt: Attempt, wordIndex: number) {
     const word = attempt.words[wordIndex];
     if (!word?.t) return Promise.resolve();
     const before = attempt.words
@@ -96,17 +107,11 @@ export class Playback {
     const after = attempt.words.slice(wordIndex + 1).find((other) => other.t);
     const from = Math.max(before?.t ? before.t[1] : 0, word.t[0] - 0.03);
     const to = Math.min(after?.t ? after.t[0] : word.t[1] + 0.12, word.t[1] + 0.04);
-    this.run++;
     this.nowMine.set(wordIndex);
     return this.clips
       .cut(this.engine.audioUrl(attempt.audio), from, to)
       .then((url) => this.sound.playClip(url).finally(() => URL.revokeObjectURL(url)))
       .then(() => this.nowMine.set(null));
-  }
-
-  /** A word as I said it, then as it should sound. */
-  compareWord(attempt: Attempt, wordIndex: number, word: string) {
-    return this.chain(() => this.playMyWord(attempt, wordIndex), 350, () => this.sayWord(word));
   }
 
   /** Play one thing, wait a moment, then the next, unless something else was played or stopped meanwhile. */

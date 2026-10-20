@@ -429,8 +429,7 @@ describe('the practice state', () => {
       expect(sound.log).toEqual(['speak "you" at 0.85', 'speak "you" at 0.55']);
     });
 
-    // bug: playing my word counts as a new chain, so the comparison thinks it was stopped and never says the word
-    it.fails('plays a word cut from my take, then the reference word', async () => {
+    it('plays a word cut from my take, then the reference word', async () => {
       vi.useFakeTimers();
       const done = app.compareWord(1);
       await vi.advanceTimersByTimeAsync(0);
@@ -441,6 +440,16 @@ describe('the practice state', () => {
       await done;
       expect(sound.log.at(-1)).toBe('speak "are" at 0.85');
       expect(app.nowMine()).toBeNull();
+    });
+
+    it('stopping a word comparison stops all of it', async () => {
+      vi.useFakeTimers();
+      const done = app.compareWord(1);
+      await vi.advanceTimersByTimeAsync(0);
+      app.stop();
+      await vi.advanceTimersByTimeAsync(1000);
+      await done;
+      expect(sound.log).toEqual([`clip audio:texts/${ID}/t1.wav#0.47-0.94`]);
     });
 
     it('selects a word', () => {
