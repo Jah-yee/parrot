@@ -1,6 +1,13 @@
 // Parrot's look ("studio"): green-tinted greys, parrot green for actions, a yellow highlighter for the word being
 // spoken, coral red only for record and misheard words, amber for words that sounded off.
-// Bricolage Grotesque for headings and the sentence, Figtree for everything else (both bundled, OFL).
+// DM Sans throughout, as on the website (bundled, OFL).
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-display: swap;
+}
 
 :root {
   --ground: #f2f4ef;
@@ -36,8 +43,8 @@
   --shadow-lg: 0 24px 70px rgba(20, 32, 26, 0.22);
   // the macOS window buttons float over the top of the app (titleBarStyle Overlay): room for them
   --titlebar: 0px;
-  --display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', system-ui, sans-serif;
-  --font: Figtree, system-ui, -apple-system, sans-serif;
+  --display: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font: 'DM Sans', system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
 
