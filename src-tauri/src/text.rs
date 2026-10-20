@@ -354,6 +354,15 @@ pub struct WordTime {
     pub letters: Option<Vec<Option<f64>>>,
 }
 
+/// A word's verdict, saved and sent as "good", "unclear" or "wrong".
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WordStatus {
+    Good,
+    Unclear,
+    Wrong,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WordResult {
     pub w: String,
@@ -361,7 +370,7 @@ pub struct WordResult {
     pub score: Option<f64>,
     #[serde(rename = "ref")]
     pub reference: Option<f64>,
-    pub status: String,
+    pub status: WordStatus,
     pub heard: Option<String>,
     pub extra: String,
     /// the score of each character of the word (takes from before 0.1.2 have none)
@@ -384,12 +393,12 @@ pub fn judge(text: &str, heard: &str, mine: &[WordTime], reference: Option<&[Wor
             let score = mine.get(word_index).and_then(|word_time| word_time.score);
             let reference_score = reference.and_then(|reference_times| reference_times.get(word_index)).and_then(|word_time| word_time.score);
             let status = if wrong[word_index].is_some() {
-                "wrong"
+                WordStatus::Wrong
             } else {
                 match (score, reference_score) {
-                    (Some(score), Some(reference_score)) if score < OFF_BELOW && reference_score - score > OFF_VS_REFERENCE => "unclear",
-                    (Some(score), None) if score < OFF_FLOOR => "unclear",
-                    _ => "good",
+                    (Some(score), Some(reference_score)) if score < OFF_BELOW && reference_score - score > OFF_VS_REFERENCE => WordStatus::Unclear,
+                    (Some(score), None) if score < OFF_FLOOR => WordStatus::Unclear,
+                    _ => WordStatus::Good,
                 }
             };
             WordResult {
@@ -397,7 +406,7 @@ pub fn judge(text: &str, heard: &str, mine: &[WordTime], reference: Option<&[Wor
                 t: mine.get(word_index).and_then(|word_time| word_time.t),
                 score,
                 reference: reference_score,
-                status: status.into(),
+                status,
                 heard: wrong[word_index].clone(),
                 extra: extra[word_index].clone(),
                 letters: mine.get(word_index).and_then(|word_time| word_time.letters.clone()),
@@ -463,7 +472,15 @@ mod tests {
         ];
         let reference = vec![WordTime { t: None, score: Some(0.95), letters: None }; 3];
         let results = judge(text, "the beautiful sinks", &mine, Some(&reference));
-        assert_eq!(results.iter().map(|word| word.status.as_str()).collect::<Vec<_>>(), vec!["good", "unclear", "wrong"]);
+        assert_eq!(results.iter().map(|word| word.status).collect::<Vec<_>>(), vec![WordStatus::Good, WordStatus::Unclear, WordStatus::Wrong]);
         assert_eq!(results[2].heard.as_deref(), Some("sinks"));
+    }
+
+    #[test]
+    fn statuses_keep_their_saved_names() {
+        // tries already on disk (from either engine) say "good", "unclear" or "wrong"
+        let statuses = [WordStatus::Good, WordStatus::Unclear, WordStatus::Wrong];
+        assert_eq!(serde_json::to_string(&statuses).unwrap(), r#"["good","unclear","wrong"]"#);
+        assert_eq!(serde_json::from_str::<Vec<WordStatus>>(r#"["good","unclear","wrong"]"#).unwrap(), statuses);
     }
 }

@@ -11,10 +11,12 @@ mod store;
 mod text;
 
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use store::{Attempt, Store};
+use store::{Activity, Attempt, AttemptSummary, PartScore, Store, TextItem};
 use tauri::{AppHandle, Manager, State};
+use text::WordStatus;
 
 pub struct Engine {
     store: Store,
@@ -72,7 +74,7 @@ impl Engine {
             }
         }
         let words = text::judge(&txt, &heard, &mine, None);
-        let good = words.iter().filter(|word| word.status == "good").count();
+        let good = words.iter().filter(|word| word.status == WordStatus::Good).count();
         let spoken = if said > 0 && said < words.len() { said } else { words.len() };
         std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
         let now = chrono::Local::now();
@@ -105,23 +107,23 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + 
 fn info(engine: State<'_, Shared>) -> Value {
     json!({
         "data": engine.store.data,
-        "models": models::ALL.iter().map(|model| (model.key, models::ready(&engine.models, model))).collect::<std::collections::BTreeMap<_, _>>(),
-        "sizes": models::ALL.iter().map(|model| (model.key, model.bytes)).collect::<std::collections::BTreeMap<_, _>>(),
+        "models": models::ALL.iter().map(|model| (model.key, models::ready(&engine.models, model))).collect::<BTreeMap<_, _>>(),
+        "sizes": models::ALL.iter().map(|model| (model.key, model.bytes)).collect::<BTreeMap<_, _>>(),
     })
 }
 
 #[tauri::command]
-fn texts(engine: State<'_, Shared>) -> Vec<Value> {
+fn texts(engine: State<'_, Shared>) -> Vec<TextItem> {
     engine.store.list()
 }
 
 #[tauri::command]
-fn add_text(engine: State<'_, Shared>, text: String, title: Option<String>, mode: Option<String>) -> Result<Value, String> {
+fn add_text(engine: State<'_, Shared>, text: String, title: Option<String>, mode: Option<String>) -> Result<TextItem, String> {
     engine.store.add(&text, title, mode)
 }
 
 #[tauri::command]
-fn update_text(engine: State<'_, Shared>, id: String, title: Option<String>, mode: Option<String>, opened: Option<bool>) -> Result<Value, String> {
+fn update_text(engine: State<'_, Shared>, id: String, title: Option<String>, mode: Option<String>, opened: Option<bool>) -> Result<TextItem, String> {
     engine.store.update(&id, title, mode, opened.unwrap_or(false))
 }
 
@@ -131,12 +133,12 @@ fn delete_text(engine: State<'_, Shared>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn scores(engine: State<'_, Shared>, text: String) -> Result<Value, String> {
-    engine.store.scores(&text).map(|part_scores| json!(part_scores))
+fn scores(engine: State<'_, Shared>, text: String) -> Result<BTreeMap<String, PartScore>, String> {
+    engine.store.scores(&text)
 }
 
 #[tauri::command]
-fn attempts(engine: State<'_, Shared>, text: String, part: String) -> Result<Vec<Value>, String> {
+fn attempts(engine: State<'_, Shared>, text: String, part: String) -> Result<Vec<AttemptSummary>, String> {
     engine.store.attempts(&text, &part)
 }
 
@@ -146,7 +148,7 @@ fn attempt(engine: State<'_, Shared>, text: String, part: String, id: String) ->
 }
 
 #[tauri::command]
-fn activity(engine: State<'_, Shared>) -> Value {
+fn activity(engine: State<'_, Shared>) -> Activity {
     engine.store.activity()
 }
 
@@ -238,13 +240,13 @@ mod tests {
         let engine = Engine { store: Store { data: data.clone() }, models, aligner: Mutex::new(None), recognizer: Mutex::new(None) };
         let text = "The northern lights are one of the most beautiful things you can see in the night sky.";
         let added = engine.store.add(text, Some("Lights".into()), Some("sentences".into())).unwrap();
-        let id = added["id"].as_str().unwrap().to_string();
+        let id = added.id;
         let wav = std::fs::read(std::env::var("PARROT_TAKE").unwrap()).unwrap();
         let started = std::time::Instant::now();
         let attempt = engine.check(&id, text, &wav).unwrap();
         eprintln!("{:.1} s · score {} · {} wpm · heard: {}", started.elapsed().as_secs_f64(), attempt.score, attempt.wpm, attempt.heard);
-        for word in attempt.words.iter().filter(|word| word.status != "good") {
-            eprintln!("  {} {} heard={:?} score={:?}", word.w, word.status, word.heard, word.score);
+        for word in attempt.words.iter().filter(|word| word.status != WordStatus::Good) {
+            eprintln!("  {} {:?} heard={:?} score={:?}", word.w, word.status, word.heard, word.score);
         }
         if let Ok(out) = std::env::var("PARROT_E2E_OUT") {
             std::fs::write(out, serde_json::to_string(&attempt.words).unwrap()).unwrap();
@@ -258,7 +260,7 @@ mod tests {
         assert!(data.join(&attempt.audio).exists(), "the take is saved");
         assert_eq!(engine.store.attempts(&id, text).unwrap().len(), 1);
         assert_eq!(engine.store.scores(&id).unwrap().values().next().unwrap().last, attempt.score);
-        assert!(attempt.words.iter().any(|word| word.w == "things" && word.status == "wrong" && word.heard.as_deref() == Some("sinks")));
+        assert!(attempt.words.iter().any(|word| word.w == "things" && word.status == WordStatus::Wrong && word.heard.as_deref() == Some("sinks")));
         let silent = {
             let silence_path = data.join("silence.wav");
             audio::write_wav(&silence_path, &audio::Pcm { samples: vec![0.0; 48000], rate: 48000 }).unwrap();

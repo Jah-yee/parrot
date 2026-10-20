@@ -29,7 +29,7 @@ fn now() -> String {
     Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PartScore {
     pub last: i64,
     pub best: i64,
@@ -48,6 +48,49 @@ pub struct Attempt {
     pub score: i64,
     /// the recording, relative to the data folder (first-engine tries say /files/texts/...)
     pub audio: String,
+}
+
+/// A text as the library shows it.
+#[derive(Serialize, Debug)]
+pub struct TextItem {
+    pub id: String,
+    pub title: String,
+    pub text: String,
+    pub words: usize,
+    pub created: String,
+    pub opened: Option<String>,
+    pub mode: String,
+    /// parts recorded at least once, and their average latest score
+    pub practised: usize,
+    pub average: Option<i64>,
+    pub scores: BTreeMap<String, PartScore>,
+}
+
+/// A try in the list of a part's tries.
+#[derive(Serialize, Debug)]
+pub struct AttemptSummary {
+    pub id: String,
+    pub when: String,
+    pub score: i64,
+    pub wpm: i64,
+    pub duration: f64,
+}
+
+#[derive(Serialize, Debug)]
+pub struct DayTries {
+    pub date: String,
+    pub tries: usize,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Activity {
+    pub days: Vec<DayTries>,
+    pub tries: i64,
+    pub average: Option<i64>,
+}
+
+fn rounded_mean(total: i64, count: usize) -> Option<i64> {
+    (count > 0).then(|| (total as f64 / count as f64).round() as i64)
 }
 
 pub struct Store {
@@ -125,7 +168,7 @@ impl Store {
         Ok(out)
     }
 
-    fn text_info(&self, dir: &Path) -> Value {
+    fn text_info(&self, dir: &Path) -> TextItem {
         let id = dir.file_name().unwrap().to_string_lossy().to_string();
         let body = fs::read_to_string(dir.join("text.txt")).unwrap_or_default();
         let meta = Self::meta(dir);
@@ -143,26 +186,31 @@ impl Store {
             .filter(|title| !title.is_empty())
             .map(String::from)
             .unwrap_or_else(|| format!("{}…", body.split_whitespace().take(6).collect::<Vec<_>>().join(" ")));
-        json!({
-            "id": id, "title": title, "text": body, "words": body.split_whitespace().count(), "created": created,
-            "mode": meta.get("mode").cloned().unwrap_or(json!("sentences")), "opened": meta.get("opened").cloned(),
-            "practised": last.len(), "scores": scores,
-            "average": if last.is_empty() { Value::Null } else { json!((last.iter().sum::<i64>() as f64 / last.len() as f64).round() as i64) },
-        })
+        TextItem {
+            id,
+            title,
+            words: body.split_whitespace().count(),
+            text: body,
+            created,
+            opened: meta.get("opened").and_then(Value::as_str).map(String::from),
+            mode: meta.get("mode").and_then(Value::as_str).unwrap_or("sentences").to_string(),
+            practised: last.len(),
+            average: rounded_mean(last.iter().sum(), last.len()),
+            scores,
+        }
     }
 
-    pub fn list(&self) -> Vec<Value> {
-        let mut out: Vec<Value> = fs::read_dir(self.texts())
+    pub fn list(&self) -> Vec<TextItem> {
+        let mut out: Vec<TextItem> = fs::read_dir(self.texts())
             .map(|entries| {
                 entries.flatten().map(|entry| entry.path()).filter(|path| path.join("text.txt").exists()).map(|path| self.text_info(&path)).collect()
             })
             .unwrap_or_default();
-        let key = |text: &Value| text["opened"].as_str().or(text["created"].as_str()).unwrap_or("").to_string();
-        out.sort_by_key(|text| std::cmp::Reverse(key(text)));
+        out.sort_by(|left, right| right.opened.as_ref().unwrap_or(&right.created).cmp(left.opened.as_ref().unwrap_or(&left.created)));
         out
     }
 
-    pub fn add(&self, text: &str, title: Option<String>, mode: Option<String>) -> Result<Value, String> {
+    pub fn add(&self, text: &str, title: Option<String>, mode: Option<String>) -> Result<TextItem, String> {
         let body = norm(text);
         if body.is_empty() {
             return Err("the text is empty".into());
@@ -176,7 +224,7 @@ impl Store {
         Ok(self.text_info(&dir))
     }
 
-    pub fn update(&self, id: &str, title: Option<String>, mode: Option<String>, opened: bool) -> Result<Value, String> {
+    pub fn update(&self, id: &str, title: Option<String>, mode: Option<String>, opened: bool) -> Result<TextItem, String> {
         let dir = self.text_dir(id)?;
         let title = title.map(|title| title.trim().to_string()).filter(|title| !title.is_empty()).map(Value::from);
         let opened = if opened { Some(json!(now())) } else { None };
@@ -192,12 +240,12 @@ impl Store {
         fs::rename(&dir, trash.join(format!("{id}-{}", Local::now().format("%Y%m%d-%H%M%S")))).map_err(|error| error.to_string())
     }
 
-    pub fn attempts(&self, id: &str, part: &str) -> Result<Vec<Value>, String> {
+    pub fn attempts(&self, id: &str, part: &str) -> Result<Vec<AttemptSummary>, String> {
         let mut tries = Self::read_attempts(&self.part_dir(id, part)?);
         tries.reverse();
         Ok(tries
-            .iter()
-            .map(|attempt| json!({"id": attempt.id, "when": attempt.when, "score": attempt.score, "wpm": attempt.wpm, "duration": attempt.duration}))
+            .into_iter()
+            .map(|attempt| AttemptSummary { id: attempt.id, when: attempt.when, score: attempt.score, wpm: attempt.wpm, duration: attempt.duration })
             .collect())
     }
 
@@ -212,10 +260,10 @@ impl Store {
     }
 
     /// Tries per day for the last 7 days (today last), and their average score.
-    pub fn activity(&self) -> Value {
+    pub fn activity(&self) -> Activity {
         let today = Local::now().date_naive();
         let mut days: BTreeMap<chrono::NaiveDate, usize> = (0..7).map(|days_ago| (today - chrono::Duration::days(days_ago), 0)).collect();
-        let (mut total, mut scored) = (0i64, 0i64);
+        let (mut total, mut scored) = (0i64, 0usize);
         if let Ok(texts) = fs::read_dir(self.texts()) {
             for text in texts.flatten() {
                 let parts = fs::read_dir(text.path()).into_iter().flatten().flatten();
@@ -238,10 +286,11 @@ impl Store {
                 }
             }
         }
-        json!({
-            "days": days.iter().map(|(date, tries)| json!({"date": date.format("%Y-%m-%d").to_string(), "tries": tries})).collect::<Vec<_>>(),
-            "tries": scored, "average": if scored > 0 { json!((total as f64 / scored as f64).round() as i64) } else { Value::Null },
-        })
+        Activity {
+            days: days.into_iter().map(|(date, tries)| DayTries { date: date.format("%Y-%m-%d").to_string(), tries }).collect(),
+            tries: scored as i64,
+            average: rounded_mean(total, scored),
+        }
     }
 }
 
@@ -262,13 +311,32 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("parrot-store-{}", std::process::id()));
         let store = Store { data: dir.clone() };
         let added = store.add("Hello there. How are you?", Some("Greeting".into()), Some("sentences".into())).unwrap();
-        let id = added["id"].as_str().unwrap().to_string();
+        let id = added.id;
         assert_eq!(store.list().len(), 1);
         assert!(store.part_dir(&id, "How are you?").is_ok());
         assert!(store.part_dir(&id, "Something else").is_err());
-        assert_eq!(store.update(&id, Some("Hi".into()), None, true).unwrap()["title"], "Hi");
+        assert_eq!(store.update(&id, Some("Hi".into()), None, true).unwrap().title, "Hi");
         store.delete(&id).unwrap();
         assert!(store.list().is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn sends_the_shapes_the_interface_reads() {
+        // the keys of TextItem, AttemptSummary and Activity in src/app/core/models.ts
+        let keys = |value: Value| value.as_object().unwrap().keys().cloned().collect::<Vec<_>>().join(" ");
+        let dir = std::env::temp_dir().join(format!("parrot-shapes-{}", std::process::id()));
+        let store = Store { data: dir.clone() };
+        let added = serde_json::to_value(store.add("Hello there.", None, None).unwrap()).unwrap();
+        assert_eq!(keys(added.clone()), "average created id mode opened practised scores text title words");
+        assert_eq!((&added["mode"], &added["opened"], &added["average"]), (&json!("sentences"), &Value::Null, &Value::Null));
+        assert_eq!(added["title"], "Hello there.…");
+        let summary = AttemptSummary { id: "20260101-120000".into(), when: "2026-01-01T12:00:00".into(), score: 80, wpm: 120, duration: 2.5 };
+        assert_eq!(keys(serde_json::to_value(summary).unwrap()), "duration id score when wpm");
+        let activity = serde_json::to_value(store.activity()).unwrap();
+        assert_eq!(keys(activity.clone()), "average days tries");
+        assert_eq!(keys(activity["days"][6].clone()), "date tries");
+        assert_eq!((activity["days"].as_array().unwrap().len(), &activity["tries"], &activity["average"]), (7, &json!(0), &Value::Null));
         let _ = fs::remove_dir_all(dir);
     }
 }
