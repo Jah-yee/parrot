@@ -1,0 +1,99 @@
+//! What the speech recognizer hears: whisper.cpp (small.en), built into the app, on the graphics chip on macOS.
+
+use crate::text::WordTime;
+use std::path::Path;
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+pub struct Recognizer {
+    ctx: WhisperContext,
+}
+
+impl Recognizer {
+    pub fn load(model: &Path) -> Result<Self, String> {
+        let ctx = WhisperContext::new_with_params(model, WhisperContextParameters::default())
+            .map_err(|e| format!("could not load the speech model: {e}"))?;
+        Ok(Self { ctx })
+    }
+
+    fn hear(&self, audio: &[f32]) -> Result<String, String> {
+        let mut state = self.ctx.create_state().map_err(|e| e.to_string())?;
+        let mut p = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        p.set_language(Some("en"));
+        p.set_n_threads(std::thread::available_parallelism().map(|n| n.get().min(8)).unwrap_or(4) as i32);
+        p.set_print_progress(false);
+        p.set_print_realtime(false);
+        p.set_print_special(false);
+        p.set_print_timestamps(false);
+        p.set_no_context(true);
+        p.set_suppress_blank(true);
+        // whisper needs at least a second of audio: pad short takes with silence
+        let mut a = audio.to_vec();
+        if a.len() < 16000 * 11 / 10 {
+            a.resize(16000 * 11 / 10, 0.0);
+        }
+        state.full(p, &a).map_err(|e| format!("speech recognition failed: {e}"))?;
+        let text: Vec<String> = state
+            .as_iter()
+            .filter_map(|s| s.to_str_lossy().ok().map(|t| t.trim().to_string()))
+            .filter(|t| !t.is_empty())
+            .collect();
+        Ok(text.join(" "))
+    }
+
+    /// What whisper hears in a 16 kHz take. whisper.cpp reads 30-second windows and on a long take it can drop
+    /// everything up to the next window, so a take longer than `limit` seconds is cut into chunks at the pauses
+    /// between words (word times from the aligner) and each chunk is heard on its own.
+    pub fn transcribe(&self, audio: &[f32], words: &[WordTime], limit: f64) -> Result<String, String> {
+        let times: Vec<[f64; 2]> = words.iter().filter_map(|w| w.t).collect();
+        if times.is_empty() || times.last().unwrap()[1] <= limit {
+            return self.hear(audio);
+        }
+        let end = times.last().unwrap()[1];
+        let gaps: Vec<(f64, f64)> = times.windows(2).map(|w| (w[0][1], w[1][0])).collect();
+        let mut cuts = vec![];
+        let mut start = 0.0;
+        while end - start > limit {
+            // the widest pause in the last 40% of the window, so every chunk keeps some context
+            let cut = gaps
+                .iter()
+                .map(|(a, b)| (b - a, (a + b) / 2.0))
+                .filter(|(_, mid)| *mid > start + limit * 0.6 && *mid < start + limit)
+                .max_by(|x, y| x.0.total_cmp(&y.0))
+                .map(|(_, mid)| mid)
+                .unwrap_or(start + limit);
+            cuts.push(cut);
+            start = cut;
+        }
+        let mut edges = vec![0.0];
+        edges.extend(cuts);
+        let mut parts = vec![];
+        for (i, a) in edges.iter().enumerate() {
+            let from = (*a * 16000.0) as usize;
+            let to = edges.get(i + 1).map(|b| (*b * 16000.0) as usize).unwrap_or(audio.len()).min(audio.len());
+            parts.push(self.hear(&audio[from.min(to)..to])?);
+        }
+        Ok(parts.join(" "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Needs the model and a sample take on this machine; skipped elsewhere (CI).
+    #[test]
+    fn hears_a_real_take() {
+        let home = std::path::PathBuf::from(std::env::var("HOME").unwrap());
+        let model = home.join(".cache/creator-studio/whisper/ggml-small.en.bin");
+        let wav = home.join(".cache/parrot-build/sample.wav");
+        if !model.exists() || !wav.exists() {
+            eprintln!("skipped");
+            return;
+        }
+        let r = Recognizer::load(&model).unwrap();
+        let pcm = crate::audio::read_wav(&std::fs::read(wav).unwrap()).unwrap();
+        let heard = r.transcribe(&pcm.samples, &[], 25.0).unwrap();
+        eprintln!("heard: {heard}");
+        assert!(heard.to_lowercase().contains("particles from the sun"), "{heard}");
+    }
+}
