@@ -1,17 +1,13 @@
 /* Parrot's site. The look comes from the logo: the cream of its tile, its green sound bars, and the red of a word
-   that came out wrong. Quiet type, thin lines and one strong button; the product shows itself in a live demo.
-   Fonts are served with the site (no third-party requests). */
+   that came out wrong. Quiet type (DM Sans, served with the site: no third-party requests), thin lines and one
+   strong button; the product shows itself in a live demo. */
 
 @font-face {
-  font-family: 'Bricolage Grotesque';
-  src: url('fonts/bricolage-grotesque.woff2') format('woff2');
-  font-weight: 200 800;
+  font-family: 'DM Sans';
+  src: url('fonts/dm-sans.woff2') format('woff2');
+  font-weight: 100 1000;
   font-display: swap;
 }
-@font-face { font-family: Figtree; src: url('fonts/figtree-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
-@font-face { font-family: Figtree; src: url('fonts/figtree-500.woff2') format('woff2'); font-weight: 500; font-display: swap; }
-@font-face { font-family: Figtree; src: url('fonts/figtree-600.woff2') format('woff2'); font-weight: 600; font-display: swap; }
-@font-face { font-family: Figtree; src: url('fonts/figtree-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {
   --bg: #fbf9f4;
@@ -32,8 +28,8 @@
   --band: #14201a;
   --band-ink: #eef2ee;
   --band-2: #a9b6ae;
-  --display: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font: Figtree, system-ui, -apple-system, sans-serif;
+  --display: 'DM Sans', system-ui, sans-serif;
+  --font: 'DM Sans', system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
 }
