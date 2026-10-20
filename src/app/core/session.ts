@@ -1,0 +1,211 @@
+import { computed, inject, Injectable, signal } from '@angular/core';
+import { Clips } from './clips';
+import { Engine } from './engine';
+import { errorMessage, Library } from './library';
+import { Attempt, AttemptSummary, Mode, Part, PartScore } from './models';
+import { Playback } from './playback';
+import { Recorder } from './recorder';
+import { readSetting, writeSetting } from './settings';
+import { bare, splitText } from './split';
+
+/** The text open for practice: its parts, the part being practised, its tries, and recording a new one. */
+@Injectable({ providedIn: 'root' })
+export class Session {
+  private engine = inject(Engine);
+  private clips = inject(Clips);
+  private library = inject(Library);
+  private playback = inject(Playback);
+  private recorder = inject(Recorder);
+
+  readonly view = signal<'home' | 'practice'>('home');
+  private openId = signal<string | null>(null);
+  /** the open text, as the library has it now */
+  readonly text = computed(() => this.library.texts().find((item) => item.id === this.openId()) ?? null);
+  readonly parts = signal<Part[]>([]);
+  readonly index = signal(0);
+  readonly scores = signal<Record<string, PartScore>>({});
+
+  readonly result = signal<Attempt | null>(null);
+  readonly history = signal<AttemptSummary[]>([]);
+  readonly checking = signal(false);
+  readonly selected = signal<number | null>(null);
+  /** the loudness of the shown try, for the waveform (null while loading) */
+  readonly peaks = signal<number[] | null>(null);
+  readonly bars = 92;
+
+  private failure = signal<string | null>(null);
+  /** what went wrong last: with this text, else with the library */
+  readonly error = computed(() => this.failure() ?? this.library.error());
+
+  readonly part = computed(() => this.parts()[this.index()] ?? null);
+  readonly words = computed(() => this.part()?.text.split(' ') ?? []);
+  readonly progress = computed(() => {
+    const parts = this.parts();
+    const scores = this.scores();
+    const done = parts.filter((part) => scores[part.key]);
+    const avg = done.length
+      ? Math.round(done.reduce((sum, part) => sum + scores[part.key].last, 0) / done.length)
+      : null;
+    return { total: parts.length, done: done.length, avg };
+  });
+
+  /** the score of the try before the one shown */
+  readonly previousScore = computed(() => {
+    const result = this.result();
+    const history = this.history();
+    const shownIndex = history.findIndex((attempt) => attempt.id === result?.id);
+    return shownIndex >= 0 && shownIndex + 1 < history.length
+      ? history[shownIndex + 1].score
+      : null;
+  });
+  /** words of the shown try that came out wrong, for the reading tips */
+  readonly troubleWords = computed(() =>
+    (this.result()?.words ?? [])
+      .filter((word) => word.status === 'wrong')
+      .map((word) => bare(word.w)),
+  );
+
+  /** Open a text at a part: the given one, else where it was left. */
+  async open(id: string, index?: number) {
+    const text = this.library.texts().find((item) => item.id === id);
+    if (!text) return;
+    this.playback.stop();
+    this.failure.set(null);
+    this.openId.set(id);
+    this.view.set('practice');
+    writeSetting('text', id);
+    this.engine.updateText(id, { opened: true }).catch(() => {});
+    await this.build(
+      text.mode,
+      index != null ? String(index) : readSetting(`part:${id}:${text.mode}`, '0'),
+    );
+  }
+
+  /** Add a text and open it. */
+  async add(text: string, title: string, mode: Mode) {
+    const added = await this.library.add(text, title, mode);
+    if (added) await this.open(added.id);
+  }
+
+  home() {
+    this.playback.stop();
+    this.failure.set(null);
+    this.view.set('home');
+    this.library.loadTexts();
+    this.library.loadActivity();
+  }
+
+  async setMode(mode: Mode) {
+    const text = this.text();
+    if (!text || text.mode === mode) return;
+    const w0 = this.part()?.w0 ?? 0;
+    this.playback.stop();
+    await this.library.setMode(text.id, mode);
+    await this.build(mode, null, w0);
+  }
+
+  /** Split the open text and go to a part: the saved one, or the one holding word w0. */
+  private async build(mode: Mode, savedIndex: string | null, w0?: number) {
+    const text = this.text()!;
+    const parts = await splitText(text.text, mode);
+    this.parts.set(parts);
+    this.scores.set(await this.engine.scores(text.id).catch(() => ({})));
+    let partIndex =
+      w0 != null ? parts.findLastIndex((part) => part.w0 <= w0) : Number(savedIndex ?? 0);
+    if (!(partIndex >= 0 && partIndex < parts.length)) partIndex = 0;
+    await this.select(partIndex);
+  }
+
+  async select(partIndex: number) {
+    const text = this.text();
+    const parts = this.parts();
+    if (!text || partIndex < 0 || partIndex >= parts.length) return;
+    this.playback.stop();
+    this.index.set(partIndex);
+    this.result.set(null);
+    this.history.set([]);
+    this.selected.set(null);
+    writeSetting(`part:${text.id}:${text.mode}`, String(partIndex));
+    const part = parts[partIndex];
+    if (!this.scores()[part.key]) return;
+    const history = await this.engine.attempts(text.id, part.text);
+    if (this.part() !== part || !history.length) return;
+    this.history.set(history);
+    this.show(await this.engine.attempt(text.id, part.text, history[0].id));
+  }
+
+  /** Show a try, and load its waveform. */
+  private show(attempt: Attempt) {
+    this.result.set(attempt);
+    this.peaks.set(null);
+    this.clips
+      .peaks(this.engine.audioUrl(attempt.audio), this.bars)
+      .then((peaks) => this.result() === attempt && this.peaks.set(peaks))
+      .catch(() => {});
+  }
+
+  next() {
+    this.select(this.index() + 1);
+  }
+
+  previous() {
+    this.select(this.index() - 1);
+  }
+
+  async showAttempt(id: string) {
+    const text = this.text();
+    const part = this.part();
+    if (!text || !part) return;
+    this.playback.stop();
+    this.show(await this.engine.attempt(text.id, part.text, id));
+  }
+
+  selectWord(wordIndex: number | null) {
+    this.selected.set(wordIndex);
+  }
+
+  // ---- recording
+
+  async toggleRecord() {
+    if (this.recorder.recording()) return this.finishRecording();
+    if (this.checking() || !this.part()) return;
+    this.playback.stop();
+    try {
+      await this.recorder.start();
+      this.failure.set(null);
+    } catch (error) {
+      this.failure.set(
+        `No microphone: ${(error as Error).message}. Allow Parrot to use the microphone.`,
+      );
+    }
+  }
+
+  private async finishRecording() {
+    const text = this.text()!;
+    const part = this.part()!;
+    const blob = await this.recorder.stop();
+    this.checking.set(true);
+    try {
+      const attempt = await this.engine.check(text.id, part.text, blob);
+      this.scores.update((scores) => ({
+        ...scores,
+        [part.key]: {
+          last: attempt.score,
+          best: Math.max(attempt.score, scores[part.key]?.best ?? 0),
+          tries: (scores[part.key]?.tries ?? 0) + 1,
+        },
+      }));
+      this.library.loadTexts();
+      if (this.part() !== part) return;
+      this.history.set(await this.engine.attempts(text.id, part.text));
+      this.show(attempt);
+      const first = attempt.words.findIndex((word) => word.status !== 'good');
+      this.selected.set(first >= 0 ? first : null);
+      this.failure.set(null);
+    } catch (error) {
+      this.failure.set(errorMessage(error));
+    } finally {
+      this.checking.set(false);
+    }
+  }
+}

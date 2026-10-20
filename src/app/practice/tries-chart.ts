@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Store } from '../core/store';
+import { Session } from '../core/session';
 
 /** Every try of the part as a bar, oldest first; click one to see it. */
 @Component({
@@ -7,11 +7,11 @@ import { Store } from '../core/store';
   template: `
     <div class="head">
       <span class="eyebrow">Tries of this part</span>
-      <span class="hint">{{ store.history().length > 6 ? 'last 6 of ' : '' }}{{ store.history().length }}</span>
+      <span class="hint">{{ session.history().length > 6 ? 'last 6 of ' : '' }}{{ session.history().length }}</span>
     </div>
     <div class="bars">
       @for (attempt of tries(); track attempt.id) {
-        <button type="button" [class.on]="attempt.on" (click)="store.showAttempt(attempt.id)" [title]="attempt.title">
+        <button type="button" [class.on]="attempt.on" (click)="session.showAttempt(attempt.id)" [title]="attempt.title">
           <b>{{ attempt.score }}</b>
           <span class="bar" [style.height.px]="attempt.h"></span>
           <span class="time">{{ attempt.time }}</span>
@@ -85,10 +85,10 @@ import { Store } from '../core/store';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TriesChart {
-  protected store = inject(Store);
+  protected session = inject(Session);
   protected readonly tries = computed(() => {
-    const shown = this.store.result()?.id;
-    return this.store
+    const shown = this.session.result()?.id;
+    return this.session
       .history()
       .slice(0, 6)
       .reverse()

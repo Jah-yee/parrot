@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, output, resource,
 import { Mode, Part, TextItem } from '../core/models';
 import { readSetting } from '../core/settings';
 import { sentences, shortRanges, splitText } from '../core/split';
-import { Store } from '../core/store';
+import { Library } from '../core/library';
+import { Session } from '../core/session';
 import { Icon } from '../shared/icon';
 import { Logo } from '../shared/logo';
 import { band } from '../shared/score';
@@ -23,7 +24,8 @@ interface Card {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Home {
-  protected store = inject(Store);
+  protected library = inject(Library);
+  protected session = inject(Session);
   readonly settings = output<void>();
   protected band = band;
   protected Math = Math;
@@ -51,7 +53,7 @@ export class Home {
 
   /** every text split the way it is practised, with a colour per part */
   private readonly cards = resource({
-    params: () => this.store.texts(),
+    params: () => this.library.texts(),
     loader: ({ params }) =>
       Promise.all(
         params.map(async (text): Promise<Card> => {
@@ -80,7 +82,7 @@ export class Home {
   });
 
   protected readonly week = computed(() => {
-    const activity = this.store.activity();
+    const activity = this.library.activity();
     const top = Math.max(1, ...(activity?.days.map((day) => day.tries) ?? [1]));
     return (activity?.days ?? []).map((day, dayIndex, all) => ({
       day: new Date(day.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' }),
@@ -90,7 +92,7 @@ export class Home {
     }));
   });
 
-  protected readonly practisedParts = computed(() => this.store.texts().reduce((total, text) => total + text.practised, 0));
+  protected readonly practisedParts = computed(() => this.library.texts().reduce((total, text) => total + text.practised, 0));
 
   protected ring(card: Card) {
     const total = card.parts.length || 1;
@@ -102,23 +104,23 @@ export class Home {
   protected start() {
     const text = this.draft().trim();
     if (!text) return;
-    this.store.add(text, this.draftTitle(), this.draftMode());
+    this.session.add(text, this.draftTitle(), this.draftMode());
     this.draft.set('');
     this.draftTitle.set('');
   }
 
   protected continue(card: Card) {
-    this.store.open(card.t.id, card.nextIndex);
+    this.session.open(card.t.id, card.nextIndex);
   }
 
   protected async rename(text: TextItem, title: string) {
     this.renaming.set(null);
-    if (title.trim() && title.trim() !== text.title) await this.store.rename(text.id, title.trim());
+    if (title.trim() && title.trim() !== text.title) await this.library.rename(text.id, title.trim());
   }
 
   protected async remove(text: TextItem) {
     this.confirming.set(null);
-    await this.store.remove(text.id);
+    await this.library.remove(text.id);
   }
 
   protected when(iso: string | null) {

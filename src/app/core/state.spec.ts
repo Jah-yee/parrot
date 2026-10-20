@@ -2,11 +2,13 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Clips } from './clips';
 import { Engine, EngineError } from './engine';
+import { Library } from './library';
 import { Activity, Attempt, Mode, PartScore, TextItem, WordStatus } from './models';
+import { Playback } from './playback';
 import { Recorder } from './recorder';
+import { Session } from './session';
 import { Sound, Track } from './sound';
 import { partKey } from './split';
-import { Store } from './store';
 
 const TEXT = 'Hello there. How are you? I am fine.';
 const ID = '95e3ac5665';
@@ -166,52 +168,57 @@ class FakeRecorder {
 
 /** Everything the interface does with the app's state, so the scenarios below don't depend on where it lives. */
 function practiceApp() {
-  const store = TestBed.inject(Store);
+  const library = TestBed.inject(Library);
+  const session = TestBed.inject(Session);
+  const playback = TestBed.inject(Playback);
+  const text = () => session.part()!.text;
+  const shown = () => session.result()!;
   return {
-    loadTexts: () => store.loadTexts(),
-    texts: () => store.texts(),
-    loaded: () => store.loaded(),
-    engineState: () => store.engineState(),
-    error: () => store.error(),
-    view: () => store.view(),
-    add: (text: string, title: string, mode: Mode) => store.add(text, title, mode),
-    rename: (id: string, title: string) => store.rename(id, title),
-    remove: (id: string) => store.remove(id),
-    open: (id: string, index?: number) => store.open(id, index),
-    home: () => store.home(),
-    text: () => store.text(),
-    parts: () => store.parts(),
-    index: () => store.index(),
-    part: () => store.part(),
-    words: () => store.words(),
-    progress: () => store.progress(),
-    setMode: (mode: Mode) => store.setMode(mode),
-    select: (partIndex: number) => store.select(partIndex),
-    next: () => store.next(),
-    previous: () => store.previous(),
-    result: () => store.result(),
-    history: () => store.history(),
-    peaks: () => store.peaks(),
-    previousScore: () => store.previousScore(),
-    troubleWords: () => store.troubleWords(),
-    showAttempt: (id: string) => store.showAttempt(id),
-    selected: () => store.selected(),
-    selectWord: (wordIndex: number | null) => store.selectWord(wordIndex),
-    rate: () => store.rate(),
-    setRate: (rate: number) => store.setRate(rate),
-    nowRef: () => store.nowRef(),
-    nowMine: () => store.nowMine(),
-    playReference: () => store.playReference(),
-    playMine: () => store.playMine(),
-    toggleReference: () => store.toggleReference(),
-    toggleMine: () => store.toggleMine(),
-    compare: () => store.compare(),
-    stop: () => store.stop(),
-    sayWord: (wordIndex: number, slow?: boolean) => store.sayWord(wordIndex, slow),
-    playMyWord: (wordIndex: number) => store.playMyWord(wordIndex),
-    compareWord: (wordIndex: number) => store.compareWord(wordIndex),
-    toggleRecord: () => store.toggleRecord(),
-    checking: () => store.checking(),
+    loadTexts: () => library.loadTexts(),
+    texts: () => library.texts(),
+    loaded: () => library.loaded(),
+    engineState: () => library.engineState(),
+    error: () => session.error(),
+    view: () => session.view(),
+    add: (text: string, title: string, mode: Mode) => session.add(text, title, mode),
+    rename: (id: string, title: string) => library.rename(id, title),
+    remove: (id: string) => library.remove(id),
+    open: (id: string, index?: number) => session.open(id, index),
+    home: () => session.home(),
+    text: () => session.text(),
+    parts: () => session.parts(),
+    index: () => session.index(),
+    part: () => session.part(),
+    words: () => session.words(),
+    scores: () => session.scores(),
+    progress: () => session.progress(),
+    setMode: (mode: Mode) => session.setMode(mode),
+    select: (partIndex: number) => session.select(partIndex),
+    next: () => session.next(),
+    previous: () => session.previous(),
+    result: () => session.result(),
+    history: () => session.history(),
+    peaks: () => session.peaks(),
+    previousScore: () => session.previousScore(),
+    troubleWords: () => session.troubleWords(),
+    showAttempt: (id: string) => session.showAttempt(id),
+    selected: () => session.selected(),
+    selectWord: (wordIndex: number | null) => session.selectWord(wordIndex),
+    rate: () => playback.rate(),
+    setRate: (rate: number) => playback.setRate(rate),
+    nowRef: () => playback.nowRef(),
+    nowMine: () => playback.nowMine(),
+    playReference: () => playback.playReference(text()),
+    playMine: () => playback.playMine(shown()),
+    toggleReference: () => playback.toggleReference(text()),
+    toggleMine: () => playback.toggleMine(shown()),
+    compare: () => playback.compare(shown(), text()),
+    stop: () => playback.stop(),
+    sayWord: (wordIndex: number, slow?: boolean) => playback.sayWord(session.words()[wordIndex], slow),
+    playMyWord: (wordIndex: number) => playback.playMyWord(shown(), wordIndex),
+    compareWord: (wordIndex: number) => playback.compareWord(shown(), wordIndex, session.words()[wordIndex]),
+    toggleRecord: () => session.toggleRecord(),
+    checking: () => session.checking(),
   };
 }
 
@@ -469,7 +476,7 @@ describe('the practice state', () => {
       await app.toggleRecord();
       await app.toggleRecord();
       const key = app.part()!.key;
-      expect(TestBed.inject(Store).scores()[key]).toEqual({ last: 50, best: 80, tries: 2 });
+      expect(app.scores()[key]).toEqual({ last: 50, best: 80, tries: 2 });
     });
 
     it('reports a take that could not be scored', async () => {

@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal, viewChild } from '@angular/core';
 import { Engine, EngineInfo, IN_APP } from './core/engine';
 import { readSetting } from './core/settings';
-import { Store } from './core/store';
+import { Library } from './core/library';
+import { Session } from './core/session';
 import { Home } from './home/home';
 import { Practice } from './practice/practice';
 import { applyTheme, Settings } from './settings/settings';
@@ -15,7 +16,7 @@ import { Setup } from './setup/setup';
     <div class="titlebar" data-tauri-drag-region></div>
     @if (setup(); as info) {
       <app-setup [info]="info" (done)="ready()" />
-    } @else if (store.view() === 'practice') {
+    } @else if (session.view() === 'practice') {
       <app-practice (settings)="settings().open()" />
     } @else {
       <app-home (settings)="settings().open()" />
@@ -26,7 +27,8 @@ import { Setup } from './setup/setup';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit {
-  protected store = inject(Store);
+  protected session = inject(Session);
+  private library = inject(Library);
   private engine = inject(Engine);
   protected settings = viewChild.required(Settings);
   /** the first launch: the speech models still to download */
@@ -46,7 +48,7 @@ export class App implements OnInit {
 
   protected async ready() {
     this.setup.set(null);
-    await this.store.loadTexts();
-    this.store.loadActivity();
+    await this.library.loadTexts();
+    this.library.loadActivity();
   }
 }

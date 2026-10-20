@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, resource } from '@angular/core';
+import { Engine } from '../core/engine';
+import { Playback } from '../core/playback';
+import { Recorder } from '../core/recorder';
+import { Session } from '../core/session';
 import { soundUnits } from '../core/sounds';
 import { bare } from '../core/split';
-import { Store } from '../core/store';
 import { Icon } from '../shared/icon';
 
 /** One word up close: how it should sound, what went wrong, and buttons to hear it both ways. */
@@ -22,7 +25,7 @@ import { Icon } from '../shared/icon';
           <span class="pill bad">{{ mine()?.heard ? 'misheard' : 'not heard' }}</span>
         }
       }
-      <button class="btn ghost close" (click)="store.selectWord(null)" aria-label="Close"><app-icon name="close" [size]="16" /></button>
+      <button class="btn ghost close" (click)="session.selectWord(null)" aria-label="Close"><app-icon name="close" [size]="16" /></button>
     </div>
 
     <div class="sounds">
@@ -70,10 +73,10 @@ import { Icon } from '../shared/icon';
     }
 
     <div class="buttons">
-      <button class="btn primary" (click)="store.sayWord(index()!)"><app-icon name="volume" [size]="16" /> Hear it</button>
-      <button class="btn" (click)="store.sayWord(index()!, true)"><app-icon name="turtle" [size]="16" /> Slowly</button>
-      <button class="btn" [disabled]="!mine()?.t" (click)="store.playMyWord(index()!)"><app-icon name="play" [size]="13" /> Mine</button>
-      <button class="btn" [disabled]="!mine()?.t" (click)="store.compareWord(index()!)"><app-icon name="swap" [size]="16" /> Compare</button>
+      <button class="btn primary" (click)="sayWord()"><app-icon name="volume" [size]="16" /> Hear it</button>
+      <button class="btn" (click)="sayWord(true)"><app-icon name="turtle" [size]="16" /> Slowly</button>
+      <button class="btn" [disabled]="!mine()?.t" (click)="playMine()"><app-icon name="play" [size]="13" /> Mine</button>
+      <button class="btn" [disabled]="!mine()?.t" (click)="compare()"><app-icon name="swap" [size]="16" /> Compare</button>
     </div>
   `,
   styles: `
@@ -207,20 +210,23 @@ import { Icon } from '../shared/icon';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WordCard {
-  protected store = inject(Store);
-  protected readonly index = this.store.selected;
+  protected session = inject(Session);
+  private playback = inject(Playback);
+  private recorder = inject(Recorder);
+  private engine = inject(Engine);
+  protected readonly index = this.session.selected;
   protected readonly raw = computed(() => {
     const wordIndex = this.index();
-    return wordIndex == null ? '' : (this.store.words()[wordIndex] ?? '');
+    return wordIndex == null ? '' : (this.session.words()[wordIndex] ?? '');
   });
   protected readonly word = computed(() => bare(this.raw()));
   protected readonly mine = computed(() => {
     const wordIndex = this.index();
-    return wordIndex == null || this.store.recorder.recording() ? null : (this.store.result()?.words[wordIndex] ?? null);
+    return wordIndex == null || this.recorder.recording() ? null : (this.session.result()?.words[wordIndex] ?? null);
   });
   protected readonly sounds = resource({
     params: () => this.word() || undefined,
-    loader: ({ params }) => this.store.soundsLike(params),
+    loader: ({ params }) => this.engine.soundsLike(params),
   });
   protected pct = (score: number | null) => Math.round((score ?? 0) * 100);
   /** the word's sounds as spelled, coloured by how surely each was heard; a word that passed both checks shows no
@@ -246,7 +252,7 @@ export class WordCard {
   protected readonly why = computed(() => {
     const mine = this.mine();
     const esc = (text: string) => text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!);
-    if (!mine) return this.store.result() ? '' : 'Record this part to see how you said it.';
+    if (!mine) return this.session.result() ? '' : 'Record this part to see how you said it.';
     const out: string[] = [];
     if (mine.status === 'wrong') {
       out.push(mine.heard ? `Heard as <b>“${esc(mine.heard)}”</b>.` : 'Speech recognition did not hear this word.');
@@ -259,4 +265,18 @@ export class WordCard {
     if (mine.extra) out.push(`Extra words heard after it: “${esc(mine.extra)}”.`);
     return out.join(' ');
   });
+
+  protected sayWord(slow = false) {
+    this.playback.sayWord(this.raw(), slow);
+  }
+
+  protected playMine() {
+    const result = this.session.result();
+    if (result) this.playback.playMyWord(result, this.index()!);
+  }
+
+  protected compare() {
+    const result = this.session.result();
+    if (result) this.playback.compareWord(result, this.index()!, this.raw());
+  }
 }

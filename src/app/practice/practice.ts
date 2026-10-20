@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, output, viewChild } from '@angular/core';
 import { Mode } from '../core/models';
-import { Store } from '../core/store';
+import { Playback } from '../core/playback';
+import { Recorder } from '../core/recorder';
+import { Session } from '../core/session';
 import { Icon } from '../shared/icon';
 import { band } from '../shared/score';
 import { ScoreRing } from './score-ring';
@@ -18,7 +20,9 @@ import { WordCard } from './word-card';
   host: { '(document:keydown)': 'key($event)', '(window:resize)': 'fit()' },
 })
 export class Practice {
-  protected store = inject(Store);
+  protected session = inject(Session);
+  protected playback = inject(Playback);
+  protected recorder = inject(Recorder);
   readonly settings = output<void>();
   protected band = band;
   private stepper = viewChild<ElementRef<HTMLElement>>('stepper');
@@ -31,37 +35,37 @@ export class Practice {
   ];
   protected readonly rates = [0.6, 0.75, 1];
 
-  protected readonly recording = this.store.recorder.recording;
+  protected readonly recording = this.recorder.recording;
   /** the try shown, unless a new one is being recorded */
-  protected readonly result = computed(() => (this.recording() ? null : this.store.result()));
+  protected readonly result = computed(() => (this.recording() ? null : this.session.result()));
   protected readonly counts = computed(() => {
     const words = this.result()?.words ?? [];
     return { wrong: words.filter((word) => word.status === 'wrong').length, unclear: words.filter((word) => word.status === 'unclear').length };
   });
   protected readonly delta = computed(() => {
     const result = this.result();
-    const previousScore = this.store.previousScore();
+    const previousScore = this.session.previousScore();
     return result && previousScore != null ? result.score - previousScore : null;
   });
   protected readonly unit = computed(
-    () => ({ whole: 'Text', sentences: 'Sentence', short: 'Part' })[this.store.text()?.mode ?? 'sentences'],
+    () => ({ whole: 'Text', sentences: 'Sentence', short: 'Part' })[this.session.text()?.mode ?? 'sentences'],
   );
   protected readonly size = computed(() => {
-    const wordCount = this.store.words().length;
+    const wordCount = this.session.words().length;
     return wordCount > 120 ? 'xl' : wordCount > 45 ? 'long' : '';
   });
 
   constructor() {
     // the sentence as large as the card allows: shrink the type until it fits (long texts still scroll at 18 px)
     effect(() => {
-      this.store.words();
+      this.session.words();
       this.size();
       this.result();
       queueMicrotask(() => this.fit());
     });
     // keep the current part in view in the stepper
     effect(() => {
-      const partIndex = this.store.index();
+      const partIndex = this.session.index();
       queueMicrotask(() =>
         this.stepper()?.nativeElement.children[partIndex]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }),
       );
@@ -89,10 +93,27 @@ export class Practice {
   }
 
   protected wordClick(wordIndex: number) {
-    this.store.selectWord(wordIndex);
-    const word = this.result()?.words[wordIndex];
-    if (word?.t && word.status !== 'good') this.store.compareWord(wordIndex);
-    else this.store.sayWord(wordIndex);
+    this.session.selectWord(wordIndex);
+    const shown = this.result();
+    const word = shown?.words[wordIndex];
+    if (shown && word?.t && word.status !== 'good') this.playback.compareWord(shown, wordIndex, this.session.words()[wordIndex]);
+    else this.playback.sayWord(this.session.words()[wordIndex]);
+  }
+
+  protected toggleReference() {
+    const part = this.session.part();
+    if (part) this.playback.toggleReference(part.text);
+  }
+
+  protected toggleMine() {
+    const shown = this.session.result();
+    if (shown) this.playback.toggleMine(shown);
+  }
+
+  protected compare() {
+    const shown = this.session.result();
+    const part = this.session.part();
+    if (shown && part) this.playback.compare(shown, part.text);
   }
 
   protected pace(wpm: number) {
@@ -103,30 +124,29 @@ export class Practice {
     const el = event.target as HTMLElement;
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || event.metaKey || event.ctrlKey || event.altKey) return;
     if (document.querySelector('dialog[open]')) return;
-    const store = this.store;
     switch (event.key) {
       case ' ':
-        store.toggleReference();
+        this.toggleReference();
         break;
       case 'r':
       case 'R':
-        store.toggleRecord();
+        this.session.toggleRecord();
         break;
       case 'm':
       case 'M':
-        store.toggleMine();
+        this.toggleMine();
         break;
       case 'ArrowDown':
       case 'ArrowRight':
-        store.next();
+        this.session.next();
         break;
       case 'ArrowUp':
       case 'ArrowLeft':
-        store.previous();
+        this.session.previous();
         break;
       case 'Escape':
-        store.stop();
-        store.selectWord(null);
+        this.playback.stop();
+        this.session.selectWord(null);
         break;
       default:
         return;

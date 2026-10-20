@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
-import { Store } from '../core/store';
+import { Library } from '../core/library';
+import { Session } from '../core/session';
 import { Icon } from '../shared/icon';
 import { Logo } from '../shared/logo';
 import { band } from '../shared/score';
@@ -9,7 +10,7 @@ import { band } from '../shared/score';
   selector: 'app-sidebar',
   imports: [Icon, Logo],
   template: `
-    <button class="brand" (click)="store.home()" title="Home">
+    <button class="brand" (click)="session.home()" title="Home">
       <app-logo [size]="34" />
       <span>
         <b>Parrot</b>
@@ -17,7 +18,7 @@ import { band } from '../shared/score';
       </span>
     </button>
 
-    <button class="btn primary new" (click)="store.home()"><app-icon name="plus" [size]="16" /> New text</button>
+    <button class="btn primary new" (click)="session.home()"><app-icon name="plus" [size]="16" /> New text</button>
 
     <label class="search">
       <app-icon name="search" [size]="15" />
@@ -28,7 +29,7 @@ import { band } from '../shared/score';
     <span class="eyebrow">Your texts</span>
     <nav aria-label="Your texts">
       @for (text of shown(); track text.id) {
-        <button [class.on]="text.id === store.text()?.id" [attr.aria-current]="text.id === store.text()?.id ? 'page' : null" (click)="store.open(text.id)">
+        <button [class.on]="text.id === session.text()?.id" [attr.aria-current]="text.id === session.text()?.id ? 'page' : null" (click)="session.open(text.id)">
           <span class="what">
             <span class="t">{{ text.title }}</span>
             <span class="m">{{ text.words }} words · {{ text.practised ? text.practised + ' practised' : 'new' }}</span>
@@ -41,7 +42,7 @@ import { band } from '../shared/score';
     </nav>
 
     <footer>
-      <span class="dot" [class]="store.engineState()"></span>
+      <span class="dot" [class]="library.engineState()"></span>
       <span class="status">{{ status() }}</span>
       <button class="btn ghost square" (click)="settings.emit()" aria-label="Settings"><app-icon name="settings" [size]="17" /></button>
     </footer>
@@ -182,15 +183,16 @@ import { band } from '../shared/score';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Sidebar {
-  protected store = inject(Store);
+  protected library = inject(Library);
+  protected session = inject(Session);
   readonly settings = output<void>();
   protected band = band;
   protected query = signal('');
   protected readonly shown = computed(() => {
     const search = this.query().trim().toLowerCase();
-    return this.store.texts().filter((text) => !search || text.title.toLowerCase().includes(search) || text.text.toLowerCase().includes(search));
+    return this.library.texts().filter((text) => !search || text.title.toLowerCase().includes(search) || text.text.toLowerCase().includes(search));
   });
   protected readonly status = computed(
-    () => ({ checking: 'Starting…', ready: 'On-device · ready', down: 'Engine not running' })[this.store.engineState()],
+    () => ({ checking: 'Starting…', ready: 'On-device · ready', down: 'Engine not running' })[this.library.engineState()],
   );
 }

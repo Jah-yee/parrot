@@ -56,7 +56,7 @@
     <section class="card week" aria-label="This week">
       <div class="head">
         <span class="eyebrow">This week</span>
-        @if (store.activity(); as activity) {
+        @if (library.activity(); as activity) {
           <span class="hint">{{ activity.tries }} {{ activity.tries === 1 ? 'try' : 'tries' }}{{ activity.average != null ? ' · avg ' + activity.average + '%' : '' }}</span>
         }
       </div>
@@ -75,12 +75,12 @@
   <div class="right">
     <div class="heading">
       <h1>Your texts</h1>
-      @if (store.texts().length) {
-        <span class="hint">{{ store.texts().length }} {{ store.texts().length === 1 ? 'text' : 'texts' }} · {{ practisedParts() }} parts practised</span>
+      @if (library.texts().length) {
+        <span class="hint">{{ library.texts().length }} {{ library.texts().length === 1 ? 'text' : 'texts' }} · {{ practisedParts() }} parts practised</span>
       }
     </div>
 
-    @if (store.engineState() === 'down') {
+    @if (library.engineState() === 'down') {
       <div class="card down">
         <b>The speech engine isn't running.</b>
         <span>Start it with <code>python engine/server.py</code>. Parrot connects as soon as it's up.</span>
@@ -110,7 +110,7 @@
 
     <ul class="grid">
       @for (card of shown(); track card.t.id) {
-        <li class="card text" (click)="renaming() !== card.t.id && confirming() !== card.t.id && store.open(card.t.id)">
+        <li class="card text" (click)="renaming() !== card.t.id && confirming() !== card.t.id && session.open(card.t.id)">
           <div class="row">
             @if (renaming() === card.t.id) {
               <input
@@ -151,7 +151,7 @@
       } @empty {
         @if (query()) {
           <li class="empty">No text matches “{{ query() }}”.</li>
-        } @else if (store.loaded() && store.engineState() !== 'down') {
+        } @else if (library.loaded() && library.engineState() !== 'down') {
           <li class="empty first">
             <app-logo [size]="56" />
             <b>Nothing to practise yet</b>
