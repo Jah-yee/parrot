@@ -57,45 +57,81 @@ impl Engine {
         let dir = self.store.part_dir(text_id, part)?;
         let raw = audio::read_wav(wav)?;
         let take = audio::clean(raw).filter(|cleaned| cleaned.seconds() >= 0.5).ok_or("Nothing was heard in the recording. Is the microphone on?")?;
-        let a16 = audio::resample(&take, 16000);
         let txt = store::norm(part);
-        let mut mine = self.with_aligner(|aligner| aligner.align(&a16, &txt))?;
-        let heard = self.with_recognizer(|recognizer| recognizer.transcribe(&a16, &mine, 25.0))?;
-        // stopped before the end: the aligner squeezes the whole text into the take and the words that were said
-        // score low, so score only the words up to the last one heard; the rest count as missed
-        let (wrong, _) = text::heard_words(&txt, &heard);
-        let said = wrong.iter().rposition(|verdict| verdict.is_none()).map(|last_heard| last_heard + 1).unwrap_or(0);
-        if said > 0 && said < mine.len() && wrong[said..].iter().all(|verdict| verdict.as_deref() == Some("")) {
-            let first: Vec<&str> = txt.split_whitespace().take(said).collect();
-            let head = self.with_aligner(|aligner| aligner.align(&a16, &first.join(" ")))?;
-            mine.splice(..said, head);
-            for word_time in &mut mine[said..] {
-                *word_time = text::WordTime { score: Some(0.0), ..Default::default() };
-            }
-        }
-        let words = text::judge(&txt, &heard, &mine, None);
-        let good = words.iter().filter(|word| word.status == WordStatus::Good).count();
-        let spoken = if said > 0 && said < words.len() { said } else { words.len() };
+        let secs = take.seconds();
+        let scored = score_take(self, &audio::resample(&take, 16000), secs, &txt)?;
         std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
         let now = chrono::Local::now();
         let id = now.format("%Y%m%d-%H%M%S").to_string();
         let file = dir.join(format!("{id}.wav"));
         audio::write_wav(&file, &take)?;
-        let secs = take.seconds();
         let attempt = Attempt {
             id,
             when: now.format("%Y-%m-%dT%H:%M:%S").to_string(),
             text: txt,
-            heard,
-            score: (100.0 * good as f64 / words.len().max(1) as f64).round() as i64,
-            wpm: if secs > 0.0 { (spoken as f64 / secs * 60.0).round() as i64 } else { 0 },
-            words,
+            heard: scored.heard,
+            score: scored.score,
+            wpm: scored.wpm,
+            words: scored.words,
             duration: (secs * 100.0).round() / 100.0,
             audio: file.strip_prefix(&self.store.data).unwrap_or(&file).to_string_lossy().replace('\\', "/"),
         };
         self.store.save_attempt(&dir, &attempt)?;
         Ok(attempt)
     }
+}
+
+/// What scoring a take needs from the models: the engine uses the real ones, tests stand in for them.
+trait Listen {
+    /// Where each word of `text` is in the take (16 kHz), and how clearly it was said.
+    fn align(&self, audio: &[f32], text: &str) -> Result<Vec<text::WordTime>, String>;
+    /// What was said in the take, with the words' places as a hint.
+    fn transcribe(&self, audio: &[f32], words: &[text::WordTime]) -> Result<String, String>;
+}
+
+impl Listen for Engine {
+    fn align(&self, audio: &[f32], text: &str) -> Result<Vec<text::WordTime>, String> {
+        self.with_aligner(|aligner| aligner.align(audio, text))
+    }
+
+    fn transcribe(&self, audio: &[f32], words: &[text::WordTime]) -> Result<String, String> {
+        self.with_recognizer(|recognizer| recognizer.transcribe(audio, words, 25.0))
+    }
+}
+
+/// A take judged against its text, before it is saved.
+struct Scored {
+    heard: String,
+    words: Vec<text::WordResult>,
+    score: i64,
+    wpm: i64,
+}
+
+/// Judge a take (16 kHz, `secs` long) of `txt` word by word.
+fn score_take(listener: &impl Listen, audio: &[f32], secs: f64, txt: &str) -> Result<Scored, String> {
+    let mut mine = listener.align(audio, txt)?;
+    let heard = listener.transcribe(audio, &mine)?;
+    // stopped before the end: the aligner squeezes the whole text into the take and the words that were said
+    // score low, so score only the words up to the last one heard; the rest count as missed
+    let (wrong, _) = text::heard_words(txt, &heard);
+    let said = wrong.iter().rposition(|verdict| verdict.is_none()).map(|last_heard| last_heard + 1).unwrap_or(0);
+    if said > 0 && said < mine.len() && wrong[said..].iter().all(|verdict| verdict.as_deref() == Some("")) {
+        let first: Vec<&str> = txt.split_whitespace().take(said).collect();
+        let head = listener.align(audio, &first.join(" "))?;
+        mine.splice(..said, head);
+        for word_time in &mut mine[said..] {
+            *word_time = text::WordTime { score: Some(0.0), ..Default::default() };
+        }
+    }
+    let words = text::judge(txt, &heard, &mine, None);
+    let good = words.iter().filter(|word| word.status == WordStatus::Good).count();
+    let spoken = if said > 0 && said < words.len() { said } else { words.len() };
+    Ok(Scored {
+        score: (100.0 * good as f64 / words.len().max(1) as f64).round() as i64,
+        wpm: if secs > 0.0 { (spoken as f64 / secs * 60.0).round() as i64 } else { 0 },
+        heard,
+        words,
+    })
 }
 
 /// Run blocking engine work off the main thread.
@@ -227,6 +263,76 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+
+    /// Stands in for the models: every word placed one second apart and said clearly, and `heard` heard.
+    struct FakeListener {
+        heard: &'static str,
+        aligned: RefCell<Vec<String>>,
+    }
+
+    impl FakeListener {
+        fn hearing(heard: &'static str) -> Self {
+            FakeListener { heard, aligned: RefCell::new(Vec::new()) }
+        }
+    }
+
+    impl Listen for FakeListener {
+        fn align(&self, _audio: &[f32], text: &str) -> Result<Vec<text::WordTime>, String> {
+            self.aligned.borrow_mut().push(text.to_string());
+            let word_time = |word_index: usize| text::WordTime { t: Some([word_index as f64, word_index as f64 + 1.0]), score: Some(0.9), letters: None };
+            Ok((0..text.split_whitespace().count()).map(word_time).collect())
+        }
+
+        fn transcribe(&self, _audio: &[f32], _words: &[text::WordTime]) -> Result<String, String> {
+            Ok(self.heard.to_string())
+        }
+    }
+
+    fn statuses(scored: &Scored) -> Vec<WordStatus> {
+        scored.words.iter().map(|word| word.status).collect()
+    }
+
+    #[test]
+    fn a_whole_take_scores_every_word() {
+        let listener = FakeListener::hearing("the cat sat down");
+        let scored = score_take(&listener, &[], 2.0, "the cat sat down").unwrap();
+        assert_eq!((scored.score, scored.wpm), (100, 120));
+        assert_eq!(statuses(&scored), vec![WordStatus::Good; 4]);
+        assert_eq!(*listener.aligned.borrow(), vec!["the cat sat down"]);
+    }
+
+    #[test]
+    fn a_misheard_word_is_wrong_and_the_rest_still_count() {
+        let listener = FakeListener::hearing("the beautiful sinks");
+        let scored = score_take(&listener, &[], 1.5, "the beautiful things").unwrap();
+        assert_eq!(statuses(&scored), vec![WordStatus::Good, WordStatus::Good, WordStatus::Wrong]);
+        // the pace counts the words up to the last one heard right
+        assert_eq!((scored.score, scored.wpm), (67, 80));
+        assert_eq!(listener.aligned.borrow().len(), 1, "no second pass when the take reached the end");
+    }
+
+    #[test]
+    fn a_take_stopped_early_scores_only_what_was_said() {
+        let listener = FakeListener::hearing("the cat");
+        let scored = score_take(&listener, &[], 1.0, "the cat sat down").unwrap();
+        // placed again with only the words said, and the rest missed
+        assert_eq!(*listener.aligned.borrow(), vec!["the cat sat down", "the cat"]);
+        assert_eq!(statuses(&scored), vec![WordStatus::Good, WordStatus::Good, WordStatus::Wrong, WordStatus::Wrong]);
+        assert_eq!(scored.words[2].score, Some(0.0));
+        assert_eq!(scored.words[0].t, Some([0.0, 1.0]));
+        // the pace counts the two words said, not the whole text
+        assert_eq!((scored.score, scored.wpm), (50, 120));
+    }
+
+    #[test]
+    fn nothing_heard_is_all_missed() {
+        let listener = FakeListener::hearing("");
+        let scored = score_take(&listener, &[], 1.0, "the cat").unwrap();
+        assert_eq!(statuses(&scored), vec![WordStatus::Wrong; 2]);
+        assert_eq!(scored.score, 0);
+        assert_eq!(listener.aligned.borrow().len(), 1);
+    }
 
     /// A take through the whole engine, as the app runs it: needs the models on this machine.
     /// cargo test --lib whole_take -- --ignored --nocapture
