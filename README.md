@@ -26,7 +26,27 @@ Transcription runs on your device (Whisper, offline): your voice is never upload
     wav2vec2 model trained on Mozilla Common Voice, so accents are expected, not marked down.
 - **Fix.** Click any word to see how it sounds (a respelling like *sik·STEEN* and its IPA, from the
   [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict)), hear it alone or slowly, hear your own, or both
-  one after the other. Every try is kept, so you can watch your score go up.
+  one after the other. The card also shows your take of the word: its sound match as a percentage, and its letters
+  grouped into the sounds they spell (*th·i·ng·s*), each green, amber or red, with the weakest one named. Every try is
+  kept, so you can watch your score go up.
+
+## Download
+
+Get Parrot from the [website](https://qwertymuzaffar.github.io/parrot/) or the
+[latest release](https://github.com/qwertymuzaffar/parrot/releases/latest).
+
+| System | File | Needs |
+|---|---|---|
+| macOS, Apple chip (M1 and newer) | `Parrot-macOS-Apple-chip.dmg` | macOS 11 Big Sur or later |
+| macOS, Intel | `Parrot-macOS-Intel.dmg` | macOS 13.4 Ventura or later |
+| Windows | `Parrot-Windows-setup.exe` or `Parrot-Windows.msi` | Windows 10 or 11, 64-bit |
+| Linux | `Parrot-Linux.AppImage`, `Parrot-Linux.deb` or the `.rpm` | 64-bit; Ubuntu 24.04, Fedora 40, Debian 13 or newer |
+
+The installers are not signed with paid developer certificates yet, so the first time you open Parrot:
+
+- **macOS:** if it says Apple cannot check Parrot, right-click the app and choose **Open**, or go to System Settings →
+  Privacy & Security → **Open Anyway**. Once is enough.
+- **Windows:** if SmartScreen says it protected your PC, click **More info** → **Run anyway**.
 
 ## On first launch
 
@@ -55,8 +75,32 @@ cd src-tauri && cargo test --lib    # engine tests
 ```
 
 The engine (`src-tauri/src`): `store.rs` keeps texts and tries, `audio.rs` cleans a take, `asr.rs` runs Whisper,
-`align.rs` places and scores each word, `text.rs` compares what was read with what was heard, `sounds.rs` respells a
-word. `engine/` holds the first Python prototype, which the interface still uses when opened in a plain browser.
+`align.rs` places each word and scores it and its letters, `text.rs` compares what was read with what was heard,
+`sounds.rs` respells a word. `engine/` holds the first Python prototype, which the interface still uses when opened in a
+plain browser.
+
+### Intel Macs
+
+ONNX Runtime publishes no Intel Mac build after 1.23, so Parrot asks only for the 1.23 API and the Intel build links
+Microsoft's [ONNX Runtime 1.23.2](https://github.com/microsoft/onnxruntime/releases/tag/v1.23.2), shipped inside the
+app. To build it on a Mac (an Apple chip Mac runs the result through Rosetta):
+
+```bash
+curl -sSL https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x86_64-1.23.2.tgz | tar xz
+mv onnxruntime-osx-x86_64-1.23.2 .ort-intel
+rustup target add x86_64-apple-darwin
+ORT_LIB_LOCATION=$PWD/.ort-intel/lib ORT_PREFER_DYNAMIC_LINK=1 MACOSX_DEPLOYMENT_TARGET=13.4 \
+  npx tauri build --target x86_64-apple-darwin --config src-tauri/tauri.intel.conf.json
+```
+
+### Releasing
+
+1. Set the version in `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+2. Create the draft release first (the workflow's token was refused creating one for 0.1.1):
+   `gh release create v0.1.2 --draft --title "Parrot v0.1.2" --notes "draft"`.
+3. Tag and push: `git tag -a v0.1.2 -m "Parrot 0.1.2" && git push origin v0.1.2`. The `Release` workflow builds all
+   four installers into the draft, each also under a fixed name (`Parrot-macOS-Apple-chip.dmg`, ...).
+4. Check the files, write the notes, and publish the draft.
 
 ## Roadmap
 
@@ -65,10 +109,13 @@ word. `engine/` holds the first Python prototype, which the interface still uses
 
 ## Website
 
-The download page is `docs/`, served by GitHub Pages. Its download buttons fill themselves in from the latest
-published release, so nothing on it needs changing for a new version.
+The download page is `docs/`, served by GitHub Pages. Its download buttons link to the fixed file names through
+`releases/latest/download/`, so they start the download directly and nothing on the page needs changing for a new
+version. When `site.css` changes, raise the `?v=` number on its links so browsers don't mix an old stylesheet with a new
+page.
 
 ## Licence
 
-MIT. The models keep their own licences (above). The Python prototype in `engine/` uses Meta's MMS aligner, which is
+MIT. The models keep their own licences (above). The app and the website use the
+[DM Sans](https://github.com/googlefonts/dm-fonts) font (SIL Open Font License, `docs/fonts/OFL-dm-sans.txt`). The Python prototype in `engine/` uses Meta's MMS aligner, which is
 licensed CC-BY-NC; the app does not.
